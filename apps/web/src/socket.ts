@@ -1,5 +1,8 @@
 import { io, Socket } from "socket.io-client";
 
-const apiUrl = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:3001`;
+const rawBase = (import.meta.env.VITE_API_URL || window.location.origin).trim();
+const apiBase = rawBase.replace(/\/$/, "");
 
-export const socket: Socket = io(apiUrl);
+export const socket: Socket = io(apiBase, {
+  path: "/socket.io",
+});

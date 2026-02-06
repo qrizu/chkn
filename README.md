@@ -263,3 +263,21 @@ npm run dev
 
 Notera: vi anvander npm workspaces. Dependencies for `packages/shared` (som `zod`)
 installeras i root `node_modules`.
+
+## DB setup (Postgres + Redis)
+
+CHKN anvander en separat schema i samma Postgres-instans som Yatzy.
+
+1. Kora schema:
+
+```
+psql "$DATABASE_URL" -f /home/qrizu/sputnet/services/chkn/db/schema.sql
+```
+
+2. Satt env vars for API:
+
+```
+DATABASE_URL=postgres://.../ytzy-dev
+CHKN_DB_SCHEMA=chkn
+REDIS_URL=redis://localhost:6379
+```

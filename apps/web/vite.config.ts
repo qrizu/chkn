@@ -6,5 +6,6 @@ export default defineConfig({
   server: {
     host: true,
     port: 5173,
+    allowedHosts: ["chkn-dev.sputnet.space", "chkn.sputnet.space"],
   },
 });
