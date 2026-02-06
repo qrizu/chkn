@@ -1,0 +1,499 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 3406] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Length 9013 >>
+stream
+BT
+/F1 12 Tf
+1 0 0 1 72 3334 Tm
+(# chkn) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(CHKN \(Chicken Race\) pa `chkn.sputnet.space` ar ett real-time spel dar du kan) Tj
+0 -14 Td
+(utmana vanner i antingen ett chicken run \(vadslagning\) eller en 5-kamp. Servern) Tj
+0 -14 Td
+(ar alltid domare och ar den enda sanningen for poang och state.) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(Om man spelar ensam far man mota en AI-bot som heter `Sputnik` \(samma bot som i) Tj
+0 -14 Td
+(Yatzy\). Login och user-hantering sker via Authentik. Backend byggs i Node och) Tj
+0 -14 Td
+(frontend i Vite, samma stack och upplagg som Yatzy.) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(**Spelare**) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(Match = 2-N spelare, rekommendation 2-6. Allt ar real-time och servern styr) Tj
+0 -14 Td
+(flodet \(authoritative server\).) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(**Valuta**) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(Allt ackumuleras i en gemensam heltalsvaluta: `CHKN-poang`.) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(## 0\) Lobby) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(1. Skapa match \(invite-lank/kod\)) Tj
+0 -14 Td
+(2. Valj lage: Chicken Run eller 5-kamp) Tj
+0 -14 Td
+(3. Ready-check -> start) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(## 5-kamp: spelordning) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(1. Yatzy) Tj
+0 -14 Td
+(2. Black Jack) Tj
+0 -14 Td
+(3. Fragesport) Tj
+0 -14 Td
+(4. Musikquiz) Tj
+0 -14 Td
+(5. Texas Hold'em) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(## 1\) Yatzy \(finns redan\)) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(Output: `yatzyScore` \(ex 0-375 beroende pa regler\).) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(Konvertering till CHKN-poang:) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(Startstack efter Yatzy = `yatzyScore * 10`) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(Spara: `stack = yatzyScore * 10`) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(## 2\) Black Jack \(byggs\)) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(Malt: skapa swing + taktik men snabbt.) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(Upplagg \(MVP-vanligt\):) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(- Du har 5 rundor.) Tj
+0 -14 Td
+(- En runda: du kan betta pa 0-7 rutor \(klassisk table layout\).) Tj
+0 -14 Td
+(- Bet per ruta: 10-100.) Tj
+0 -14 Td
+(- Varje aktiv ruta ar en separat hand mot dealer.) Tj
+0 -14 Td
+(- Efter 5 rundor: summera `bj_delta` \(netto vinst/forlust\).) Tj
+0 -14 Td
+(- Uppdatera stack: `stack = stack + bj_delta`.) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(Regelknappar per hand: Hit / Stand / Double / Split \(valfritt i MVP\). Insurance) Tj
+0 -14 Td
+(kan hoppas over forst.) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(**Viktigt for roulette-steget**) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(Definiera for blackjack:) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(- `bj_start = yatzyScore * 10`) Tj
+0 -14 Td
+(- `bj_end = stack_after_bj`) Tj
+0 -14 Td
+(- `bj_profit = max\(0, bj_end - bj_start\)`) Tj
+0 -14 Td
+(- `bj_loss = max\(0, bj_start - bj_end\)`) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(## Mellanspel A\) Roulette \(mellan 2 och 3\)) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(Bara blackjack-vinst far riskas.) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(Spelaren valjer:) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(- Farg: Rod eller Svart) Tj
+0 -14 Td
+(- Belopp: `bet <= bj_profit`) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(Utfall:) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(- Vinst: `stack += bet`) Tj
+0 -14 Td
+(- Forlust: `stack -= bet`) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(Obs: las `bj_profit` har som "roulette-tillaten pott" sa det inte gar att) Tj
+0 -14 Td
+(loop-maxa.) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(## 3\) Fragesport \(AI-fragor\)) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(**Kategorival**) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(- 6 kategorier totalt.) Tj
+0 -14 Td
+(- Round-robin: varje spelare valjer 2 kategorier var.) Tj
+0 -14 Td
+(- Totalt blir det `2 * antal_spelare` kategori-val.) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(**Fragepaket**) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(- Generera fragor per valt kategori \(ex 5 fragor per val\).) Tj
+0 -14 Td
+(- Svartighetsmix per kategori-batch: 20% latt, 60% medel, 20% svar.) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(**Poangmodell \(forslag\)**) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(Servern startar varje fraga med `startTimestamp` och tar emot svar med) Tj
+0 -14 Td
+(`serverReceivedTimestamp`.) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(Baspoang:) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(- Latt: 80) Tj
+0 -14 Td
+(- Medel: 140) Tj
+0 -14 Td
+(- Svar: 220) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(Tidsbonus:) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(`bonus = round\( bas * clamp\(1 - \(t / T\), 0, 1\) * 0.75 \)`) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(dar `t` ar sekunder till korrekt svar och `T` ar maxtid \(ex 12s\).) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(Totalpoang:) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(`points = bas + bonus`) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(Fel svar: 0 \(ingen minus i MVP\).) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(Uppdatera: `stack += trivia_points`) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(## Mellanspel B\) Tarning hogre/lagre \(mellan 3 och 4\)) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(- Sla tarning 1 \(1-6\) synlig.) Tj
+0 -14 Td
+(- Spelaren valjer hogre eller lagre.) Tj
+0 -14 Td
+(- Insats `bet <= stack`. Satt garna max, ex 25% av stack.) Tj
+0 -14 Td
+(- Sla tarning 2.) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(Utfall:) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(- Vinst: `stack += bet`) Tj
+0 -14 Td
+(- Forlust: `stack -= bet`) Tj
+0 -14 Td
+(- Vid lika: push \(0\) rekommenderas.) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(## 4\) Musikquiz) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(- 5 rundor.) Tj
+0 -14 Td
+(- Spela ett klipp per rond \(10-20s eller progressivt langre\).) Tj
+0 -14 Td
+(- Forst korrekt far poang.) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(Poangforslag:) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(- Grund: 200) Tj
+0 -14 Td
+(- Tidsbonus likt trivia, men kortare `T` \(ex 8s\)) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(Alternativt \(om flera far gissa samtidigt\):) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(- 1a: 200) Tj
+0 -14 Td
+(- 2a: 100) Tj
+0 -14 Td
+(- Ovrriga: 0) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(Uppdatera: `stack += music_points`) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(Praktiskt: tank pa rattigheter. Spotify previews om de finns, annars) Tj
+0 -14 Td
+(royalty-free bibliotek.) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(## 5\) Texas Hold'em) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(- Spelarna startar med sin ackumulerade `stack`.) Tj
+0 -14 Td
+(- Turnering "turbo".) Tj
+0 -14 Td
+(- En niva = alla har varit SB och BB exakt en gang \(en orbit\).) Tj
+0 -14 Td
+(- Efter varje orbit: blinds dubblas.) Tj
+0 -14 Td
+(- Spelet slutar nar en spelare har allt.) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(Startblinds:) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(- `SB = max\(10, round\(medianStack / 200\)\)`) Tj
+0 -14 Td
+(- `BB = 2 * SB`) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(## Single-player: Sputnik) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(- `Sputnik` ar en vanlig `MatchPlayer` med `isBot=true` och `userId="bot:sputnik"`.) Tj
+0 -14 Td
+(- Om match startar med 1 manniska -> servern auto-joinar Sputnik.) Tj
+0 -14 Td
+(- Sputnik bypassar Authentik \(intern identitet\).) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(Bot-beteende \(enkel men kul\):) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(- Yatzy: ateranvand befintlig botlogik.) Tj
+0 -14 Td
+(- Blackjack: basic strategy + liten risk-justering.) Tj
+0 -14 Td
+(- Trivia: sannolikhet att svara ratt baserat pa svarighet + reaktionstid.) Tj
+0 -14 Td
+(- Musikquiz: slumpad "igenkanning" med delay.) Tj
+0 -14 Td
+(- Hold'em: tight-aggressive med randomness.) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(## Datamodell \(sa ni slipper 17 olika poang-sanningar\)) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(Korna en `match-orchestrator` som ager state och bara lanar UI fran varje) Tj
+0 -14 Td
+(minispel.) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(Core:) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(- `Match { id, mode, status, createdAt }`) Tj
+0 -14 Td
+(- `MatchPlayer { matchId, userId, seat, stack, isConnected }`) Tj
+0 -14 Td
+(- `StageState { matchId, stage, stateJson, startedAt }`) Tj
+0 -14 Td
+(- `LedgerEntry { matchId, userId, stage, delta, reason, ts }`) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(Event-sourcing light \(rekommenderat\):) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(- Spara events: `AnswerSubmitted`, `BetPlaced`, `HandResolved`,) Tj
+0 -14 Td
+(  `StageCompleted`.) Tj
+0 -14 Td
+(- Rebuild state ska vara deterministiskt.) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(## Realtime & anti-fusk \(MVP men stabilt\)) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(- Servern ar authoritative.) Tj
+0 -14 Td
+(- Servern skickar `question shown at X`.) Tj
+0 -14 Td
+(- Servern tar emot svar + timestamp \(server time\).) Tj
+0 -14 Td
+(- Klienter far inte rakna poang.) Tj
+0 -14 Td
+(- Rate limit pa svar/guess.) Tj
+0 -14 Td
+(- Lasta stage transitions.) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(## MVP-plan \(i rat ordning\)) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(1. Match Orchestrator + Lobby + Realtime) Tj
+0 -14 Td
+(2. Integrera Yatzy-resultat -> `stack`) Tj
+0 -14 Td
+(3. Blackjack \(5 rundor, bets 10-100, 1-7 rutor\)) Tj
+0 -14 Td
+(4. Roulette rod/svart pa `bj_profit`) Tj
+0 -14 Td
+(5. Trivia \(kategori-val + AI-generator + snabbpoang\)) Tj
+0 -14 Td
+(6. Tarning hi/lo) Tj
+0 -14 Td
+(7. Musikquiz \(forst korrekt\)) Tj
+0 -14 Td
+(8. Hold'em turbo \(orbit -> blinds * 2\)) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(## Drift) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(- Doman: `chkn.sputnet.space`) Tj
+0 -14 Td
+(- Auth: Authentik) Tj
+0 -14 Td
+(- Backend: Node \(samma upplagg som Yatzy\)) Tj
+0 -14 Td
+(- Frontend: Vite \(samma upplagg som Yatzy\)) Tj
+0 -14 Td
+(- Proxy route: `/` -> Vite build \(statisk\)) Tj
+0 -14 Td
+(- Proxy route: `/api` -> Node API) Tj
+0 -14 Td
+(- Proxy route: `/socket` -> WebSocket upgrade) Tj
+0 -14 Td
+ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000242 00000 n 
+0000000312 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+9377
+%%EOF

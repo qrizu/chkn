@@ -1,0 +1,8 @@
+.env
+.env.*
+apps/api/.env
+packages/**/node_modules
+packages/**/dist
+apps/**/node_modules
+apps/**/dist
+node_modules
