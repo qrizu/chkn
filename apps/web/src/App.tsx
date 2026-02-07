@@ -1665,7 +1665,11 @@ export default function App() {
         const refreshed = await fetch(profileUrl, { credentials: "include" });
         const refreshedData = await refreshed.json().catch(() => null);
         if (refreshed.ok && refreshedData?.ok && refreshedData.profile) {
-          setProfileInfo(refreshedData.profile as ProfilePayload);
+          const merged = {
+            ...(refreshedData.profile as ProfilePayload),
+            ...(refreshedData.user as UserInfo),
+          };
+          setProfileInfo(merged);
         }
       } catch {
         // ignore refresh failures
@@ -1793,9 +1797,9 @@ export default function App() {
         <div className="profile-header">
           <div>
             <p className="eyebrow">Profile</p>
-            <h2>Create your astro profile</h2>
+            <h2>1st generate your Sputnet Space Astro Profile</h2>
             <p className="lead">
-              We use birth data to build your profile. You can leave time unknown.
+              We will use this to calculate who you are, and to be able to read you better.
             </p>
         </div>
         <div className="profile-badge">
@@ -1816,7 +1820,7 @@ export default function App() {
               onChange={handleBirthDateChange}
               value={profileForm.birthDate}
             />
-            <p className="help-text">Format: YYYY-MM-DD</p>
+            <p className="help-text">Year Month and Day of birth</p>
           </div>
           <div className="profile-field">
             <label>Time of birth</label>
