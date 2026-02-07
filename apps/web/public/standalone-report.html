@@ -1,0 +1,1306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Human Design Report (Standalone)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #2a241d;
+      --ink: #1f1b16;
+      --accent: #ff3bbf;
+      --accent-2: #2b7a78;
+      --accent-neon: #35ff6f;
+      --card: #fff7ec;
+      --card-border: rgba(31, 27, 22, 0.15);
+      --shadow: 0 20px 50px rgba(10, 6, 2, 0.25);
+      --radius: 18px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Space Grotesk", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(800px 400px at 10% 10%, rgba(255, 122, 189, 0.18) 0%, transparent 60%),
+        radial-gradient(600px 400px at 90% 20%, rgba(53, 255, 111, 0.12) 0%, transparent 60%),
+        var(--bg);
+      padding: 32px 24px 60px;
+    }
+
+    .page {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: linear-gradient(135deg, rgba(107, 74, 104, 0.98) 0%, rgba(32, 28, 26, 0.98) 60%, rgba(44, 38, 32, 0.98) 100%);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      display: grid;
+      grid-template-columns: 270px 1fr;
+      gap: 24px;
+      padding: 20px;
+    }
+
+    .sidebar {
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      background: rgba(0, 0, 0, 0.24);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+    }
+
+    .sidebar {
+      padding-top: 6px;
+    }
+
+    .sidebar-list {
+      display: grid;
+    }
+
+    .sidebar-item {
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 10px 12px;
+      display: grid;
+      gap: 4px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      margin: 6px 10px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    }
+
+    .sidebar-meta {
+      background: #efe6d6;
+      border: 1px solid rgba(31, 27, 22, 0.2);
+      border-radius: 18px;
+      padding: 12px 14px;
+      margin: 6px 10px 12px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 6px 16px rgba(0, 0, 0, 0.16);
+      display: grid;
+      gap: 6px;
+      color: #1f1b16;
+    }
+
+    .report-for-box {
+      width: fit-content;
+      max-width: 260px;
+    }
+
+    .sidebar-meta-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      font-weight: 700;
+      font-size: 0.8rem;
+      padding-bottom: 6px;
+      border-bottom: 1px solid rgba(31, 27, 22, 0.12);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .sidebar-meta-header .meta-value {
+      font-size: 0.95rem;
+      font-weight: 700;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+
+    .meta-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 0.72rem;
+      padding: 4px 8px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.7);
+    }
+
+    .meta-row:last-child {
+      border-bottom: none;
+    }
+
+    .meta-label {
+      font-weight: 600;
+      color: rgba(31, 27, 22, 0.75);
+    }
+
+    .meta-row .meta-value {
+      font-weight: 600;
+      color: #1f1b16;
+      text-align: right;
+    }
+
+    .sidebar-item.meta-item label {
+      font-size: 0.68rem;
+    }
+
+    .sidebar-item.meta-item div {
+      font-size: 0.85rem;
+      font-weight: 500;
+    }
+
+    .sidebar-item label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: rgba(247, 241, 229, 0.7);
+    }
+
+    .sidebar-item div {
+      font-weight: 600;
+      color: #f7f1e5;
+      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+    }
+
+    .sidebar-footer {
+      display: none;
+    }
+
+    .main {
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius);
+      padding: 18px 18px 24px;
+      background: linear-gradient(180deg, rgba(255, 247, 236, 0.96) 0%, rgba(245, 236, 224, 0.98) 100%);
+      display: grid;
+      gap: 18px;
+    }
+
+    .main-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(31, 27, 22, 0.15);
+      padding-bottom: 12px;
+    }
+
+    .main-header .title-stack {
+      display: grid;
+      gap: 6px;
+    }
+
+    .main-header h2 {
+      margin: 0;
+      font-family: "Fraunces", serif;
+      font-size: 1.4rem;
+    }
+
+    .brand-line {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+      color: rgba(31, 27, 22, 0.7);
+    }
+
+    .report-footer {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      justify-content: center;
+      padding: 18px 0 0;
+      font-size: 0.8rem;
+      color: rgba(31, 27, 22, 0.7);
+      margin-top: auto;
+    }
+
+    .report-footer img {
+      width: 26px;
+      height: 26px;
+      object-fit: contain;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .pill {
+      border: 1px solid rgba(31, 27, 22, 0.15);
+      background: rgba(255, 255, 255, 0.7);
+      padding: 8px 14px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--ink);
+    }
+
+    .chart-layout {
+      display: grid;
+      grid-template-columns: 170px 1fr 170px;
+      gap: 18px;
+      align-items: center;
+    }
+
+    .table-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .column-card {
+      border: 1px solid rgba(31, 27, 22, 0.28);
+      border-radius: 12px;
+      padding: 12px;
+      display: grid;
+      gap: 8px;
+      background: rgba(70, 70, 70, 0.65);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.12),
+        0 10px 24px rgba(0, 0, 0, 0.18);
+    }
+
+    .column-card header {
+      font-weight: 700;
+      font-size: 0.9rem;
+      color: var(--ink);
+      text-align: center;
+      padding-bottom: 6px;
+      border-bottom: 1px solid rgba(31, 27, 22, 0.12);
+    }
+
+    .column-card.design header {
+      color: var(--accent);
+      font-size: 1rem;
+    }
+
+    .column-card.personality header {
+      color: var(--accent-neon);
+      font-size: 1rem;
+    }
+
+    .entry {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-weight: 700;
+      font-size: 0.95rem;
+      padding: 6px 6px;
+      border-bottom: 1px solid rgba(31, 27, 22, 0.12);
+      background: rgba(90, 90, 90, 0.7);
+      border-radius: 8px;
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.18),
+        0 6px 14px rgba(0, 0, 0, 0.22);
+    }
+
+    .entry:last-child {
+      border-bottom: none;
+    }
+
+    .entry span:first-child {
+      color: var(--accent);
+      text-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+    }
+
+    .column-card.design .entry span:first-child {
+      color: var(--accent);
+    }
+
+    .column-card.personality .entry span:first-child {
+      color: var(--accent-neon);
+      text-shadow: 0 2px 8px rgba(53, 255, 111, 0.35);
+    }
+
+    .column-card.design .icon,
+    .column-card.design .astro-icon {
+      color: var(--accent);
+    }
+
+    .column-card.personality .icon,
+    .column-card.personality .astro-icon {
+      color: var(--accent-neon);
+    }
+
+    .icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 26px;
+      color: var(--ink);
+      background: rgba(255, 255, 255, 0.7);
+      border-radius: 8px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 2px 6px rgba(0, 0, 0, 0.18);
+    }
+
+    .astro-icon {
+      width: 22px;
+      height: 22px;
+      stroke: currentColor;
+      fill: none;
+    }
+
+    .bodygraph-frame {
+      background: #f8f3ea;
+      border: 1px solid rgba(31, 27, 22, 0.12);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .bodygraph-stage {
+      position: relative;
+      width: 100%;
+      max-width: 520px;
+      aspect-ratio: 556 / 928;
+      background-image: url("human-design-bodychart-556x928.png");
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: center;
+    }
+
+    .bodygraph-stage svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    .report-section {
+      display: grid;
+      gap: 10px;
+    }
+
+    .report-section h3 {
+      margin: 0;
+      font-family: "Fraunces", serif;
+      font-size: 1.1rem;
+    }
+
+    .report-section p {
+      margin: 0;
+      line-height: 1.6;
+      color: rgba(31, 27, 22, 0.88);
+      font-size: 0.95rem;
+    }
+
+    .report-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .report-card {
+      background: rgba(255, 255, 255, 0.86);
+      border: 1px solid rgba(31, 27, 22, 0.12);
+      border-radius: 12px;
+      padding: 14px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+    }
+
+    .report-card h4 {
+      margin: 0 0 6px;
+      font-size: 0.95rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: rgba(31, 27, 22, 0.6);
+    }
+
+    .report-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 6px;
+      font-size: 0.9rem;
+    }
+
+    .page {
+      break-after: page;
+      page-break-after: always;
+    }
+
+    .report-section,
+    .report-card,
+    .column-card,
+    .sidebar,
+    .main,
+    .bodygraph-frame {
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+
+    @media print {
+      body {
+        background: #fff;
+        padding: 0;
+      }
+
+      .page {
+        box-shadow: none;
+        border: none;
+      }
+
+      .page-break {
+        break-after: page;
+        page-break-after: always;
+      }
+    }
+
+    @media (max-width: 1024px) {
+      .page {
+        grid-template-columns: 1fr;
+      }
+
+      .chart-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .bodygraph-frame {
+        min-height: 360px;
+      }
+    }
+
+    @media print {
+      body,
+      .page,
+      .main,
+      .sidebar,
+      .bodygraph-frame,
+      .column-card,
+      .entry,
+      .report-footer,
+      .sidebar-meta {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+    }
+  </style>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute; left:-9999px; top:-9999px;" aria-hidden="true" focusable="false">
+    <defs>
+      <symbol id="icon-sun" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/>
+        <g stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="12" y1="2" x2="12" y2="5"/>
+          <line x1="12" y1="19" x2="12" y2="22"/>
+          <line x1="2" y1="12" x2="5" y2="12"/>
+          <line x1="19" y1="12" x2="22" y2="12"/>
+          <line x1="4.5" y1="4.5" x2="6.5" y2="6.5"/>
+          <line x1="17.5" y1="17.5" x2="19.5" y2="19.5"/>
+          <line x1="17.5" y1="6.5" x2="19.5" y2="4.5"/>
+          <line x1="4.5" y1="19.5" x2="6.5" y2="17.5"/>
+        </g>
+      </symbol>
+      <symbol id="icon-earth" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/>
+        <path d="M3 12h18M12 3a12 12 0 0 0 0 18M12 3a12 12 0 0 1 0 18" fill="none" stroke="currentColor" stroke-width="2"/>
+      </symbol>
+      <symbol id="icon-moon" viewBox="0 0 24 24">
+        <path d="M15 3a9 9 0 1 0 6 15.5A10 10 0 1 1 15 3z" fill="none" stroke="currentColor" stroke-width="2"/>
+      </symbol>
+      <symbol id="icon-nn" viewBox="0 0 24 24">
+        <circle cx="7" cy="9" r="4" fill="none" stroke="currentColor" stroke-width="2"/>
+        <circle cx="17" cy="9" r="4" fill="none" stroke="currentColor" stroke-width="2"/>
+        <path d="M7 13v5M17 13v5M7 18h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </symbol>
+      <symbol id="icon-sn" viewBox="0 0 24 24">
+        <circle cx="7" cy="15" r="4" fill="none" stroke="currentColor" stroke-width="2"/>
+        <circle cx="17" cy="15" r="4" fill="none" stroke="currentColor" stroke-width="2"/>
+        <path d="M7 11V6M17 11V6M7 6h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </symbol>
+      <symbol id="icon-mercury" viewBox="0 0 24 24">
+        <circle cx="12" cy="10" r="4" fill="none" stroke="currentColor" stroke-width="2"/>
+        <path d="M12 14v5M9 22h6M9 3c1.2 1.2 2.4 2 3 2s1.8-.8 3-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </symbol>
+      <symbol id="icon-venus" viewBox="0 0 24 24">
+        <circle cx="12" cy="9" r="5" fill="none" stroke="currentColor" stroke-width="2"/>
+        <path d="M12 14v6M9 18h6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </symbol>
+      <symbol id="icon-mars" viewBox="0 0 24 24">
+        <circle cx="10" cy="14" r="5" fill="none" stroke="currentColor" stroke-width="2"/>
+        <path d="M14 10l6-6M16 4h4v4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </symbol>
+      <symbol id="icon-jupiter" viewBox="0 0 24 24">
+        <path d="M7 4v16M7 12h6a4 4 0 1 0 0-8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </symbol>
+      <symbol id="icon-saturn" viewBox="0 0 24 24">
+        <path d="M12 4v16M8 8h8M8 16h6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </symbol>
+      <symbol id="icon-uranus" viewBox="0 0 24 24">
+        <path d="M6 6v12M18 6v12M6 12h12M12 6v12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </symbol>
+      <symbol id="icon-neptune" viewBox="0 0 24 24">
+        <path d="M12 3v18M8 7c2.5-2 5.5-2 8 0M6 20h12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </symbol>
+      <symbol id="icon-pluto" viewBox="0 0 24 24">
+        <circle cx="10" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="2"/>
+        <path d="M10 12v8M6 20h8M16 8v12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </symbol>
+    </defs>
+  </svg>
+  <div class="page">
+    <aside class="sidebar">
+      <div class="sidebar-list">
+        <div class="sidebar-meta report-for-box">
+          <div class="sidebar-meta-header">
+            <span class="meta-title">Report for:</span>
+            <span class="meta-value" id="sidebar-username">—</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-label">Date of birth</span>
+            <span class="meta-value" id="sidebar-birthdate">—</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-label">Time of birth</span>
+            <span class="meta-value" id="sidebar-birthtime">—</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-label">UTC offset</span>
+            <span class="meta-value" id="sidebar-offset">—</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-label">City of birth</span>
+            <span class="meta-value" id="sidebar-city">—</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-label">Coordinates</span>
+            <span class="meta-value" id="sidebar-coords">—</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-label">Report generated</span>
+            <span class="meta-value" id="sidebar-generated">—</span>
+          </div>
+        </div>
+        <div class="sidebar-item">
+          <label>Type</label>
+          <div id="sidebar-type">—</div>
+        </div>
+        <div class="sidebar-item">
+          <label>Profile</label>
+          <div id="sidebar-profile">—</div>
+        </div>
+        <div class="sidebar-item">
+          <label>Definition</label>
+          <div id="sidebar-definition">—</div>
+        </div>
+        <div class="sidebar-item">
+          <label>Inner Authority</label>
+          <div id="sidebar-authority">—</div>
+        </div>
+        <div class="sidebar-item">
+          <label>Strategy</label>
+          <div id="sidebar-strategy">—</div>
+        </div>
+        <div class="sidebar-item">
+          <label>Not-Self Theme</label>
+          <div id="sidebar-notself">—</div>
+        </div>
+        <div class="sidebar-item">
+          <label>Incarnation Cross</label>
+          <div id="sidebar-cross">—</div>
+        </div>
+      </div>
+      <div class="sidebar-footer"></div>
+    </aside>
+
+    <main class="main">
+      <div class="main-header">
+        <div class="title-stack">
+          <h2>Human Design Chart</h2>
+          <div class="brand-line">Calculated by Sputnik & Veloklang</div>
+        </div>
+        <div class="actions">
+          <div class="pill">Share</div>
+          <div class="pill">Download</div>
+          <div class="pill">Print</div>
+        </div>
+      </div>
+      <div class="table-layout">
+        <div class="column-card design">
+          <header>Design</header>
+          <div id="design-list" class="column-list"></div>
+        </div>
+
+        <div class="column-card personality">
+          <header>Personality</header>
+          <div id="personality-list" class="column-list"></div>
+        </div>
+      </div>
+      <div class="report-footer">
+        <img src="/logo-sputnet.png" alt="Sputnet logo">
+        <span>generated by sputnet.space</span>
+      </div>
+    </main>
+  </div>
+
+  <div class="page">
+    <main class="main">
+      <div class="main-header">
+        <div class="title-stack">
+          <h2>Human Design Chart</h2>
+          <div class="brand-line">as calculated by Sputnik</div>
+        </div>
+      </div>
+
+      <div class="bodygraph-frame">
+        <div class="bodygraph-stage">
+          <svg id="bodygraph" viewBox="0 0 556 928" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-label="Bodygraph">
+          </svg>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="page">
+    <main class="main">
+      <div class="main-header">
+        <div class="title-stack">
+          <h2>Human Design Narrative</h2>
+          <div class="brand-line">as calculated by Sputnik</div>
+        </div>
+      </div>
+
+      <section class="report-section">
+        <h3>Essence</h3>
+        <p id="report-essence">—</p>
+      </section>
+
+      <section class="report-section report-grid">
+        <div class="report-card">
+          <h4>Type & Strategy</h4>
+          <p id="report-type-strategy">—</p>
+        </div>
+        <div class="report-card">
+          <h4>Authority</h4>
+          <p id="report-authority">—</p>
+        </div>
+        <div class="report-card">
+          <h4>Profile</h4>
+          <p id="report-profile">—</p>
+        </div>
+        <div class="report-card">
+          <h4>Incarnation Cross</h4>
+          <p id="report-cross">—</p>
+        </div>
+      </section>
+
+      <section class="report-section">
+        <h3>Defined & Undefined Centers</h3>
+        <div class="report-grid">
+          <div class="report-card">
+            <h4>Defined</h4>
+            <ul class="report-list" id="report-centers-defined"></ul>
+          </div>
+          <div class="report-card">
+            <h4>Undefined</h4>
+            <ul class="report-list" id="report-centers-undefined"></ul>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="page-break"></div>
+
+  <div class="page">
+    <main class="main">
+      <div class="main-header">
+        <div class="title-stack">
+          <h2>Channels & Gates</h2>
+          <div class="brand-line">as calculated by Sputnik</div>
+        </div>
+      </div>
+
+      <section class="report-section">
+        <h3>Defined Channels</h3>
+        <ul class="report-list" id="report-channels"></ul>
+      </section>
+
+      <section class="report-section">
+        <h3>Gates</h3>
+        <div class="report-grid">
+          <div class="report-card">
+            <h4>Personality</h4>
+            <ul class="report-list" id="report-gates-personality"></ul>
+          </div>
+          <div class="report-card">
+            <h4>Design</h4>
+            <ul class="report-list" id="report-gates-design"></ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="report-section">
+        <h3>Decision, Relationships, Work, Health</h3>
+        <div class="report-grid">
+          <div class="report-card">
+            <h4>Decision Tips</h4>
+            <p id="report-decision">—</p>
+          </div>
+          <div class="report-card">
+            <h4>Relationships</h4>
+            <p id="report-relationships">—</p>
+          </div>
+          <div class="report-card">
+            <h4>Work</h4>
+            <p id="report-work">—</p>
+          </div>
+          <div class="report-card">
+            <h4>Health</h4>
+            <p id="report-health">—</p>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script>
+    const hash = window.location.hash || "";
+    const shouldPrint = hash.includes("print=1");
+    const readReportData = () => {
+      const match = hash.match(/data=([^&]+)/);
+      if (!match) return null;
+      try {
+        return JSON.parse(decodeURIComponent(match[1]));
+      } catch {
+        return null;
+      }
+    };
+
+    const fallbackData = {
+      summary: {
+        type: "—",
+        profile: "—",
+        definition: "—",
+        authority: "—",
+        strategy: "—",
+        notSelf: "—",
+        incarnationCross: "—"
+      },
+      user: {
+        username: "—",
+        birthDate: "—",
+        birthTime: "—",
+        tzOffsetMinutes: null,
+        city: "—"
+      },
+      chart: {
+        activeChannels: [],
+        definedCenters: [],
+        personalityGates: [],
+        designGates: []
+      }
+    };
+
+    const reportData = readReportData() || fallbackData;
+    const chartData = reportData.chart || fallbackData.chart;
+
+    const svg = document.getElementById("bodygraph");
+    const colors = {
+      defined: "#e0b965",
+      undefined: "rgba(255, 255, 255, 0.85)",
+      stroke: "rgba(57, 54, 48, 0.7)",
+      channel: "#ff3bbf",
+      channelAlt: "#35ff6f",
+      gateRing: "#f4ede2",
+      gateStroke: "rgba(57, 54, 48, 0.75)",
+      gateText: "#3a3631",
+      gateP: "#35ff6f",
+      gateD: "#ff3bbf"
+    };
+
+    const setText = (id, value) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.textContent = value || "—";
+    };
+
+    const setList = (id, items) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.innerHTML = "";
+      if (!items || !items.length) {
+        const li = document.createElement("li");
+        li.textContent = "—";
+        el.appendChild(li);
+        return;
+      }
+      items.forEach((item) => {
+        const li = document.createElement("li");
+        li.textContent = item;
+        el.appendChild(li);
+      });
+    };
+
+    const iconMap = {
+      sun: "#icon-sun",
+      earth: "#icon-earth",
+      moon: "#icon-moon",
+      northNode: "#icon-nn",
+      southNode: "#icon-sn",
+      mercury: "#icon-mercury",
+      venus: "#icon-venus",
+      mars: "#icon-mars",
+      jupiter: "#icon-jupiter",
+      saturn: "#icon-saturn",
+      uranus: "#icon-uranus",
+      neptune: "#icon-neptune",
+      pluto: "#icon-pluto"
+    };
+
+    const buildEntry = (item) => {
+      const row = document.createElement("div");
+      row.className = "entry";
+      const left = document.createElement("span");
+      const gate = item?.gate ?? "—";
+      const line = item?.line ? `.${item.line}` : "";
+      left.textContent = `${gate}${line}`;
+      const right = document.createElement("span");
+      right.className = "icon";
+      if (item?.planet && iconMap[item.planet]) {
+        const svgIcon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svgIcon.classList.add("astro-icon");
+        const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+        use.setAttribute("href", iconMap[item.planet]);
+        svgIcon.appendChild(use);
+        right.appendChild(svgIcon);
+      }
+      row.appendChild(left);
+      row.appendChild(right);
+      return row;
+    };
+
+    const renderLists = () => {
+      setText("sidebar-type", reportData.summary?.type);
+      setText("sidebar-profile", reportData.summary?.profile);
+      setText("sidebar-definition", reportData.summary?.definition);
+      setText("sidebar-authority", reportData.summary?.authority);
+      setText("sidebar-strategy", reportData.summary?.strategy);
+      setText("sidebar-notself", reportData.summary?.notSelf);
+      setText("sidebar-cross", reportData.summary?.incarnationCross);
+      setText("sidebar-username", reportData.user?.username);
+      setText("sidebar-birthdate", reportData.user?.birthDate);
+      setText("sidebar-birthtime", reportData.user?.birthTime);
+      const offset = typeof reportData.user?.tzOffsetMinutes === "number"
+        ? (() => {
+          const mins = reportData.user.tzOffsetMinutes;
+          const sign = mins >= 0 ? "+" : "-";
+          const abs = Math.abs(mins);
+          const hours = Math.floor(abs / 60);
+          const rem = abs % 60;
+          return `UTC${sign}${hours}${rem ? `:${String(rem).padStart(2, "0")}` : ""}`;
+        })()
+        : "—";
+      setText("sidebar-offset", offset);
+      const simplifyCity = (value) => {
+        if (!value) return "—";
+        const parts = String(value).split(",").map((p) => p.trim()).filter(Boolean);
+        if (!parts.length) return "—";
+        if (parts.length === 1) return parts[0];
+        if (parts.length === 2) return `${parts[0]}, ${parts[1]}`;
+        return `${parts[0]}, ${parts[parts.length - 1]}`;
+      };
+      setText("sidebar-city", simplifyCity(reportData.user?.city));
+      const fmtCoord = (value, pos, neg) => {
+        if (value === null || value === undefined || value === "") return "—";
+        const num = typeof value === "number" ? value : Number(value);
+        if (!Number.isFinite(num)) return "—";
+        const dir = num >= 0 ? pos : neg;
+        return `${Math.abs(num).toFixed(4)}° ${dir}`;
+      };
+      const lat = fmtCoord(reportData.user?.lat, "N", "S");
+      const lng = fmtCoord(reportData.user?.lng, "E", "W");
+      setText("sidebar-coords", lat === "—" || lng === "—" ? "—" : `${lat}, ${lng}`);
+      setText("sidebar-generated", new Date().toLocaleString());
+
+      const designList = document.getElementById("design-list");
+      const personalityList = document.getElementById("personality-list");
+      if (designList) {
+        designList.innerHTML = "";
+        (chartData.designGates || []).forEach((item) => designList.appendChild(buildEntry(item)));
+      }
+      if (personalityList) {
+        personalityList.innerHTML = "";
+        (chartData.personalityGates || []).forEach((item) =>
+          personalityList.appendChild(buildEntry(item))
+        );
+      }
+    };
+
+    const warmSentence = (value, fallback) => value && value !== "—" ? value : fallback;
+
+    const centerName = (key) => {
+      const map = {
+        head: "Head",
+        ajna: "Ajna",
+        throat: "Throat",
+        g: "G Center",
+        ego: "Ego/Will",
+        spleen: "Spleen",
+        sacral: "Sacral",
+        solar: "Solar Plexus",
+        root: "Root"
+      };
+      return map[key] || key;
+    };
+
+    const renderNarrative = () => {
+      const summary = reportData.summary || {};
+      const type = summary.type || "—";
+      const strategy = summary.strategy || "—";
+      const authority = summary.authority || "—";
+      const profile = summary.profile || "—";
+      const definition = summary.definition || "—";
+      const cross = summary.incarnationCross || "—";
+
+      const name = reportData.user?.username || "you";
+      const essence = `${name}, your chart reads like a living map. As a ${type}, your energy is here to move in its own rhythm, not by force but by alignment. When you honor your ${String(strategy).toLowerCase()}, your path feels both inevitable and strangely effortless — like doors open just as you arrive.`;
+
+      const typeStrategy = `Type and Strategy describe the how. ${type} is your energetic baseline. Strategy is the compass — follow ${strategy} and you’ll notice less resistance and more magnetic timing.`;
+
+      const authorityText = `Authority is your inner oracle. With ${authority}, clarity isn’t rushed — it arrives in layers. Give your body time to settle and the right yes/no will feel unmistakable.`;
+
+      const profileText = `Profile is your life role. ${profile} describes how you learn, influence, and mature. You’re not here to be a copy of anyone — you’re here to be a lived example.`;
+
+      const crossText = `Incarnation Cross hints at your life theme. ${cross} is the story thread that keeps weaving through your experiences, often showing you why you’re here more than how.`;
+
+      const definedKeys = reportData.chart?.definedCenters || [];
+      const centersDefined = definedKeys.map(centerName);
+      const allCenters = ["head","ajna","throat","g","ego","spleen","sacral","solar","root"];
+      const centersUndefined = allCenters
+        .filter((c) => !definedKeys.includes(c))
+        .map(centerName);
+
+      setText("report-essence", essence);
+      setText("report-type-strategy", warmSentence(typeStrategy, "—"));
+      setText("report-authority", warmSentence(authorityText, "—"));
+      setText("report-profile", warmSentence(profileText, "—"));
+      setText("report-cross", warmSentence(crossText, "—"));
+      setList("report-centers-defined", centersDefined);
+      setList("report-centers-undefined", centersUndefined);
+
+      const channels = (reportData.chart?.activeChannels || []).map((ch) => {
+        const gates = Array.isArray(ch.gates) ? ch.gates.join("–") : "";
+        const centers = Array.isArray(ch.centers) ? ch.centers.map(centerName).join(" ↔ ") : "";
+        return `${gates}${centers ? ` · ${centers}` : ""}`;
+      });
+      setList("report-channels", channels);
+
+      const pg = (reportData.chart?.personalityGates || []).map((g) => `${g.gate}.${g.line}`);
+      const dg = (reportData.chart?.designGates || []).map((g) => `${g.gate}.${g.line}`);
+      setList("report-gates-personality", pg);
+      setList("report-gates-design", dg);
+
+      const decision = `${name}, use ${authority} as your decision rhythm. If you’re unsure, slow down. Your clearest yes is the one that stays true after the emotional tide passes.`;
+      const relationships = `${name}, you’re most magnetic when you’re not performing. Let the right people recognize you first — then respond. The correct relationships feel like resonance, not pursuit.`;
+      const work = `${name}, work thrives when you’re in the right role. Choose environments that respect your strategy and give you room to refine, guide, and shape outcomes.`;
+      const health = `${name}, your body is the truth‑barometer. When you’re aligned, energy feels clean and sustainable. When you’re off, your body will tell you — earlier than your mind.`;
+
+      setText("report-decision", decision);
+      setText("report-relationships", relationships);
+      setText("report-work", work);
+      setText("report-health", health);
+    };
+
+    const centers = {
+      head: { x: 271, y: 47, type: "triangle" },        // CROWN
+      ajna: { x: 272, y: 163, type: "triangle" },
+      throat: { x: 272, y: 309, type: "square" },
+      g: { x: 272, y: 464, type: "diamond" },
+      spleen: { x: 51, y: 649, type: "triangle" },
+      ego: { x: 398, y: 539, type: "triangle" },
+      solar: { x: 504, y: 649, type: "triangle" },
+      sacral: { x: 272, y: 659, type: "square" },
+      root: { x: 272, y: 805, type: "square" }
+    };
+
+    function clearSvg() {
+      const bg = svg.querySelector("#bg-image");
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      if (bg) svg.appendChild(bg);
+    }
+
+    function createEl(name, attrs) {
+      const el = document.createElementNS("http://www.w3.org/2000/svg", name);
+      Object.entries(attrs || {}).forEach(([k, v]) => el.setAttribute(k, v));
+      return el;
+    }
+
+    function trianglePoints(cx, cy, r) {
+      const points = [];
+      for (let i = 0; i < 3; i++) {
+        const angle = (i * 120 - 90) * Math.PI / 180;
+        points.push(`${cx + r * Math.cos(angle)},${cy + r * Math.sin(angle)}`);
+      }
+      return points.join(" ");
+    }
+
+    function diamondPoints(cx, cy, r) {
+      return `${cx},${cy - r} ${cx + r},${cy} ${cx},${cy + r} ${cx - r},${cy}`;
+    }
+
+    const DEBUG_OVERLAY = false;
+    const GATE_RADIUS = 8;
+    const CHANNEL_PAD = 6;
+
+    function drawChannels(activeChannels) {
+      activeChannels.forEach((channel, idx) => {
+        const gates = Array.isArray(channel.gates) ? channel.gates : [];
+        if (gates.length !== 2) return;
+        const a = gatePositions[gates[0]];
+        const b = gatePositions[gates[1]];
+        if (!a || !b) return;
+        const color = channel.color
+          || (channel.type === "P" ? colors.channelAlt
+          : channel.type === "D" ? colors.channel
+          : idx % 2 === 0 ? colors.channel : colors.channelAlt);
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const len = Math.sqrt(dx * dx + dy * dy) || 1;
+        const ux = dx / len;
+        const uy = dy / len;
+        const startX = a.x + ux * (GATE_RADIUS + CHANNEL_PAD);
+        const startY = a.y + uy * (GATE_RADIUS + CHANNEL_PAD);
+        const endX = b.x - ux * (GATE_RADIUS + CHANNEL_PAD);
+        const endY = b.y - uy * (GATE_RADIUS + CHANNEL_PAD);
+        svg.appendChild(createEl("line", {
+          x1: startX, y1: startY, x2: endX, y2: endY,
+          stroke: color,
+          "stroke-width": 5,
+          "stroke-linecap": "round"
+        }));
+      });
+    }
+
+    const channelPairs = [
+      [1, 8], [2, 14], [3, 60], [4, 63], [5, 15], [6, 59], [7, 31], [9, 52],
+      [10, 20], [10, 34], [10, 57], [11, 56], [12, 22], [13, 33], [16, 48],
+      [17, 62], [18, 58], [19, 49], [20, 34], [20, 57], [21, 45], [23, 43],
+      [24, 61], [25, 51], [26, 44], [27, 50], [28, 38], [29, 46], [30, 41],
+      [32, 54], [34, 57], [35, 36], [37, 40], [39, 55], [42, 53], [47, 64]
+    ];
+
+    function drawHalfChannels(activeGateSet) {
+      channelPairs.forEach(([g1, g2]) => {
+        const has1 = activeGateSet.has(g1);
+        const has2 = activeGateSet.has(g2);
+        if (has1 === has2) return;
+        const aGate = has1 ? g1 : g2;
+        const bGate = has1 ? g2 : g1;
+        const a = gatePositions[aGate];
+        const b = gatePositions[bGate];
+        if (!a || !b) return;
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const len = Math.sqrt(dx * dx + dy * dy) || 1;
+        const ux = dx / len;
+        const uy = dy / len;
+        const startX = a.x + ux * (GATE_RADIUS + CHANNEL_PAD);
+        const startY = a.y + uy * (GATE_RADIUS + CHANNEL_PAD);
+        const halfLen = Math.max((len / 2) - (GATE_RADIUS + CHANNEL_PAD), 4);
+        const endX = a.x + ux * halfLen;
+        const endY = a.y + uy * halfLen;
+        svg.appendChild(createEl("line", {
+          x1: startX, y1: startY, x2: endX, y2: endY,
+          stroke: colors.channelAlt,
+          "stroke-width": 4,
+          "stroke-linecap": "round",
+          "stroke-dasharray": "6 6"
+        }));
+      });
+    }
+
+    function drawCenters(definedCenters) {
+      // Centers are intentionally not rendered; keep coordinates for channels.
+      return;
+      const radius = 35;
+      Object.entries(centers).forEach(([name, pos]) => {
+        const defined = definedCenters.includes(name);
+        let shape;
+        if (pos.type === "triangle") {
+          shape = createEl("polygon", { points: trianglePoints(pos.x, pos.y, radius) });
+        } else if (pos.type === "square") {
+          shape = createEl("rect", {
+            x: pos.x - radius, y: pos.y - radius,
+            width: radius * 2, height: radius * 2,
+            rx: 10, ry: 10
+          });
+        } else {
+          shape = createEl("polygon", { points: diamondPoints(pos.x, pos.y, radius) });
+        }
+        shape.setAttribute("fill", defined ? colors.defined : colors.undefined);
+        shape.setAttribute("stroke", colors.stroke);
+        shape.setAttribute("stroke-width", "2");
+        shape.setAttribute("stroke-linejoin", "round");
+        shape.setAttribute("stroke-linecap", "round");
+        svg.appendChild(shape);
+
+        if (DEBUG_OVERLAY) {
+          const label = createEl("text", {
+            x: pos.x,
+            y: pos.y + 4,
+            "text-anchor": "middle",
+            "font-size": "10",
+            "font-weight": "700",
+            fill: "#1f1b16"
+          });
+          label.textContent = name.toUpperCase();
+          svg.appendChild(label);
+        }
+      });
+    }
+
+    const gatePositions = {
+      64: { x: 254.62307739257812, y: 97.62308502197266 },
+      61: { x: 278.4154052734375, y: 97.62309265136719 },
+      63: { x: 304.3461608886719, y: 97.62308502197266 },
+      47: { x: 254.6230926513672, y: 134.34616088867188 },
+      24: { x: 279.484619140625, y: 134.34616088867188 },
+      4: { x: 304.34613037109375, y: 134.3461456298828 },
+      17: { x: 255.69232177734375, y: 206.59234619140625 },
+      43: { x: 278.4154052734375, y: 221.96925354003906 },
+      11: { x: 302.34619140625, y: 206.5923309326172 },
+      62: { x: 253.55386352539062, y: 273.27691650390625 },
+      23: { x: 279.484619140625, y: 273.27691650390625 },
+      56: { x: 303.4154052734375, y: 273.27691650390625 },
+      35: { x: 319.3461608886719, y: 302.5538635253906 },
+      16: { x: 237.484619140625, y: 302.5538635253906 },
+      12: { x: 318.27691650390625, y: 333.5538635253906 },
+      20: { x: 238.55386352539062, y: 334.6230773925781 },
+      45: { x: 320.4153747558594, y: 354.4846496582031 },
+      31: { x: 254.6230926513672, y: 365.5538635253906 },
+      8: { x: 279.484619140625, y: 365.5538635253906 },
+      33: { x: 303.4153747558594, y: 366.62310791015625 },
+      1: { x: 279.5538635253906, y: 412.20770263671875 },
+      7: { x: 257.34617614746094, y: 430.27691650390625 },
+      13: { x: 300.5538635253906, y: 430.2769470214844 },
+      10: { x: 223.41539001464844, y: 466.3461608886719 },
+      25: { x: 332.484619140625, y: 474.69232177734375 },
+      21: { x: 398.8615417480469, y: 506 },
+      15: { x: 255.484619140625, y: 512.9692687988281 },
+      46: { x: 301.4154052734375, y: 512.9692687988281 },
+      2: { x: 278.4154052734375, y: 530.7615966796875 },
+      51: { x: 381.72308349609375, y: 521.2769165039062 },
+      26: { x: 356.9307556152344, y: 558.484619140625 },
+      40: { x: 426.9307556152344, y: 571.5538330078125 },
+      48: { x: 54.523109436035156, y: 603.4154052734375 },
+      36: { x: 504.2384338378906, y: 603.4154052734375 },
+      57: { x: 75.52311325073242, y: 614.4154052734375 },
+      22: { x: 483.3769226074219, y: 613.3461303710938 },
+      5: { x: 253.55386352539062, y: 620.2769775390625 },
+      14: { x: 279.484619140625, y: 620.2769165039062 },
+      29: { x: 304.484619140625, y: 620.2769775390625 },
+      37: { x: 459.2384338378906, y: 627.484619140625 },
+      44: { x: 106.52310943603516, y: 633.34619140625 },
+      34: { x: 233.20770263671875, y: 647.4154052734375 },
+      50: { x: 132.59233856201172, y: 660.7615356445312 },
+      6: { x: 426.5846252441406, y: 659.6923217773438 },
+      49: { x: 454.4461364746094, y: 682.6231079101562 },
+      27: { x: 231.06922912597656, y: 683.2077026367188 },
+      32: { x: 103.45387268066406, y: 681.6231079101562 },
+      59: { x: 320.4153747558594, y: 687.484619140625 },
+      55: { x: 476.4461364746094, y: 696.6231079101562 },
+      28: { x: 83.59233856201172, y: 694.484619140625 },
+      9: { x: 303.4154052734375, y: 711.623046875 },
+      3: { x: 279.5538635253906, y: 711.6231079101562 },
+      42: { x: 253.55384826660156, y: 710.5538330078125 },
+      18: { x: 58.86927032470703, y: 709.484619140625 },
+      30: { x: 499.169189453125, y: 710.5538330078125 },
+      53: { x: 253.55386352539062, y: 763.34619140625 },
+      60: { x: 279.484619140625, y: 763.3461303710938 },
+      52: { x: 302.3461608886719, y: 763.3461303710938 },
+      38: { x: 237.48463439941406, y: 811.4154052734375 },
+      54: { x: 238.55386352539062, y: 786.4154052734375 },
+      19: { x: 319.3461608886719, y: 786.4154052734375 },
+      39: { x: 319.3461608886719, y: 810.34619140625 },
+      41: { x: 320.4154052734375, y: 839.34619140625 },
+      58: { x: 236.4154052734375, y: 840.4154052734375 }
+    };
+
+    function drawGates() {
+      const allGates = [...chartData.personalityGates, ...chartData.designGates];
+      const seen = new Set();
+
+      allGates.forEach((gateInfo) => {
+        const pos = gatePositions[gateInfo.gate];
+        if (!pos) return;
+        const key = `${gateInfo.gate}-${gateInfo.type}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        const color = gateInfo.type === "P" ? colors.gateP : colors.gateD;
+        const offset = gateInfo.type === "D" && chartData.personalityGates.some(g => g.gate === gateInfo.gate) ? 15 : 0;
+        svg.appendChild(createEl("circle", {
+          cx: pos.x + offset, cy: pos.y,
+          r: GATE_RADIUS,
+          fill: colors.gateRing,
+          stroke: colors.gateStroke,
+          "stroke-width": 2
+        }));
+        const text = createEl("text", {
+          x: pos.x + offset, y: pos.y + 3,
+          "text-anchor": "middle",
+          "font-size": "7",
+          "font-weight": "600",
+          fill: color
+        });
+        text.textContent = gateInfo.gate;
+        svg.appendChild(text);
+      });
+
+      if (DEBUG_OVERLAY) {
+        Object.entries(gatePositions).forEach(([gate, pos]) => {
+          const dot = createEl("circle", {
+            cx: pos.x,
+            cy: pos.y,
+            r: 2.5,
+            fill: "#db4a2b"
+          });
+          svg.appendChild(dot);
+          const label = createEl("text", {
+            x: pos.x + 6,
+            y: pos.y + 4,
+            "font-size": "8",
+            "font-weight": "600",
+            fill: "#db4a2b"
+          });
+          label.textContent = gate;
+          svg.appendChild(label);
+        });
+      }
+    }
+
+    function renderBodygraph() {
+      clearSvg();
+      drawChannels(chartData.activeChannels || []);
+      const activeGateSet = new Set(
+        [...(chartData.personalityGates || []), ...(chartData.designGates || [])]
+          .map((g) => g.gate)
+          .filter((g) => typeof g === "number")
+      );
+      drawHalfChannels(activeGateSet);
+      drawCenters(chartData.definedCenters || []);
+      drawGates();
+
+      if (DEBUG_OVERLAY) {
+        console.log("CENTERS", centers);
+        console.log("GATE_POSITIONS", gatePositions);
+      }
+    }
+
+    renderLists();
+    renderBodygraph();
+    renderNarrative();
+
+    if (shouldPrint) {
+      window.addEventListener("load", () => {
+        setTimeout(() => window.print(), 200);
+      });
+    }
+
+  </script>
+</body>
+</html>

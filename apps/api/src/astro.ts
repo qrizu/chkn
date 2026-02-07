@@ -79,9 +79,9 @@ const signFromLon = (lon: number) => SIGNS[Math.floor(normalizeAngle(lon) / 30) 
 
 const toDateString = (birthDate: string | Date) => {
   if (birthDate instanceof Date) {
-    const y = birthDate.getUTCFullYear();
-    const m = String(birthDate.getUTCMonth() + 1).padStart(2, "0");
-    const d = String(birthDate.getUTCDate()).padStart(2, "0");
+    const y = birthDate.getFullYear();
+    const m = String(birthDate.getMonth() + 1).padStart(2, "0");
+    const d = String(birthDate.getDate()).padStart(2, "0");
     return `${y}-${m}-${d}`;
   }
   return String(birthDate);
@@ -297,13 +297,13 @@ export async function computeBirthChart(profile: ProfileRow) {
     if (typeof swe.swe_houses !== "function") throw new Error("swisseph_missing");
     if (swe.swe_houses.length >= 5) {
       return new Promise((resolve, reject) => {
-        swe.swe_houses(jd, lat, lng, "P", (res: any) => {
+        swe.swe_houses(jd, lat, lng, "W", (res: any) => {
           if (!res) reject(new Error("swe_houses_failed"));
           else resolve(res);
         });
       });
     }
-    return swe.swe_houses(jd, lat, lng, "P");
+    return swe.swe_houses(jd, lat, lng, "W");
   };
 
   const bodies = [
@@ -375,7 +375,7 @@ export async function computeBirthChart(profile: ProfileRow) {
   }
 
   const houseData: HouseInfo = {
-    system: "P",
+    system: "W",
     cusps: houseInfo.cusps.map((v: number) => normalizeAngle(Number(v))),
     asc: houseInfo.asc !== null && houseInfo.asc !== undefined ? normalizeAngle(Number(houseInfo.asc)) : null,
     mc: houseInfo.mc !== null && houseInfo.mc !== undefined ? normalizeAngle(Number(houseInfo.mc)) : null,
@@ -385,7 +385,7 @@ export async function computeBirthChart(profile: ProfileRow) {
     meta: {
       calculated_at: new Date().toISOString(),
       engine: "swisseph",
-      house_system: "P",
+      house_system: "W",
       unknown_time: profile.unknown_time,
       assumed_time: time.assumed ? "12:00" : null,
       tz_name: profile.tz_name ?? null,

@@ -281,3 +281,11 @@ DATABASE_URL=postgres://.../ytzy-dev
 CHKN_DB_SCHEMA=chkn
 REDIS_URL=redis://localhost:6379
 ```
+### Bygg och Kör hjälp, kör från var som, bygger om med hjälp av python gyy och lite annat som är onödigt att isntallera lokalt, utan bar ha med sig på byggservern, python3 vill annars kalla på pip och köra virtuella runtimes,  
+```
+docker compose -f /home/qrizu/sputnet/docker-compose.yml build chkn-backend-dev
+docker compose -f /home/qrizu/sputnet/docker-compose.yml up -d chkn-backend-dev
+docker compose -f /home/qrizu/sputnet/docker-compose.yml build chkn-backend
+docker compose -f /home/qrizu/sputnet/docker-compose.yml up -d chkn-backend
+
+```

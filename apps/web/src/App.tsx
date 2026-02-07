@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Flatpickr from "react-flatpickr";
 import "flatpickr/dist/flatpickr.css";
 import { Swedish } from "flatpickr/dist/l10n/sv.js";
@@ -23,6 +23,7 @@ type ProfilePayload = {
   tz_offset_minutes?: number | null;
   username?: string | null;
   email?: string | null;
+  name?: string | null;
 };
 
 type UserInfo = {
@@ -57,6 +58,17 @@ type PlaceResult = {
   lng: number | null;
 };
 
+type HdCenterKey =
+  | "head"
+  | "ajna"
+  | "throat"
+  | "g"
+  | "ego"
+  | "spleen"
+  | "sacral"
+  | "solar"
+  | "root";
+
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: markerIcon2x,
   iconUrl: markerIcon,
@@ -69,10 +81,24 @@ type MapClickProps = {
 
 const MapClickHandler = ({ onPick }: MapClickProps) => {
   useMapEvents({
-    click: (event) => {
+    click: (event: L.LeafletMouseEvent) => {
       onPick(event.latlng.lat, event.latlng.lng);
     },
   });
+  return null;
+};
+
+const normalizeCenterName = (name: string): HdCenterKey | null => {
+  const raw = name.toLowerCase().replace(/\s+/g, "");
+  if (raw.includes("head") || raw.includes("crown")) return "head";
+  if (raw.includes("ajna")) return "ajna";
+  if (raw.includes("throat")) return "throat";
+  if (raw === "g" || raw.includes("identity") || raw.includes("gcenter")) return "g";
+  if (raw.includes("heart") || raw.includes("ego") || raw.includes("will")) return "ego";
+  if (raw.includes("spleen")) return "spleen";
+  if (raw.includes("sacral")) return "sacral";
+  if (raw.includes("solar") || raw.includes("emotional")) return "solar";
+  if (raw.includes("root")) return "root";
   return null;
 };
 
@@ -98,6 +124,10 @@ export default function App() {
   const [profileDirty, setProfileDirty] = useState(false);
   const [profileInfo, setProfileInfo] = useState<ProfilePayload | null>(null);
   const [insights, setInsights] = useState<ProfileInsights | null>(null);
+  const [hdPageInsights, setHdPageInsights] = useState<ProfileInsights | null>(null);
+  const [hdPageLoading, setHdPageLoading] = useState(false);
+  const [hdPageError, setHdPageError] = useState<string | null>(null);
+  const [hdPageProfile, setHdPageProfile] = useState<ProfilePayload | null>(null);
   const [insightsLoading, setInsightsLoading] = useState(true);
   const [insightsError, setInsightsError] = useState<string | null>(null);
   const [modal, setModal] = useState<{
@@ -105,12 +135,22 @@ export default function App() {
     subtitle?: string;
     body: string;
     actions?: { label: string; href: string }[];
+    icon?: React.ReactNode;
   } | null>(null);
   const [mapLatLng, setMapLatLng] = useState<{ lat: number; lng: number } | null>(null);
   const [placeResults, setPlaceResults] = useState<PlaceResult[]>([]);
   const [placeLoading, setPlaceLoading] = useState(false);
   const [showCoords, setShowCoords] = useState(false);
   const [showMap, setShowMap] = useState(false);
+  const [isHdOpen, setIsHdOpen] = useState(false);
+  const [isHdChartOpen, setIsHdChartOpen] = useState(false);
+  const userInitial = (profileInfo?.name ?? profileInfo?.username ?? "?")
+    .trim()
+    .charAt(0)
+    .toUpperCase();
+  const avatarFilename =
+    (profileInfo?.username ? `${profileInfo.username.toLowerCase()}.jpg` : "Default.jpg");
+  const avatarUrl = `/avatars/${avatarFilename}`;
   const [profileForm, setProfileForm] = useState({
     birthDate: "",
     birthTime: "",
@@ -120,11 +160,16 @@ export default function App() {
     birthLng: "",
   });
   const lastSavedRef = useRef<string>("");
+  const hdCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const draftKey = "chkn.profileDraft";
-  const isProfilePage = window.location.pathname.startsWith("/profile");
-  const isSettingsPage =
-    window.location.pathname.startsWith("/settings") ||
-    window.location.pathname.startsWith("/background");
+  const pathname = window.location.pathname;
+  const isProfilePage = pathname === "/" || pathname.startsWith("/profile");
+  const isSettingsPage = pathname.startsWith("/settings") || pathname.startsWith("/background");
+  const isHumanDesignPage = pathname.startsWith("/human-design");
+  const isLobbyPage = pathname.startsWith("/lobby");
+  const hdPageUserId = isHumanDesignPage
+    ? window.location.pathname.replace("/human-design", "").replace(/^\/+/, "")
+    : "";
   const [showEditForm, setShowEditForm] = useState(false);
   const houseRows = useMemo(() => {
     const houses = insights?.astrology_json?.houses;
@@ -237,8 +282,60 @@ export default function App() {
 
   const ascLon = insights?.astrology_json?.houses?.asc;
 
-  const openModal = (title: string, body: string, subtitle?: string, actions?: { label: string; href: string }[]) => {
-    setModal({ title, body, subtitle, actions });
+  const openModal = (
+    title: string,
+    body: string,
+    subtitle?: string,
+    actions?: { label: string; href: string }[],
+    icon?: React.ReactNode
+  ) => {
+    setModal({ title, body, subtitle, actions, icon });
+  };
+
+  const getModalCalcNote = (title: string) => {
+    const lower = title.toLowerCase();
+    const astroTitles = [
+      "sun",
+      "moon",
+      "mercury",
+      "venus",
+      "mars",
+      "jupiter",
+      "saturn",
+      "uranus",
+      "neptune",
+      "pluto",
+      "ascendant",
+    ];
+    const isHouse = lower.startsWith("house") || lower.includes("house");
+    const isSign = [
+      "aries",
+      "taurus",
+      "gemini",
+      "cancer",
+      "leo",
+      "virgo",
+      "libra",
+      "scorpio",
+      "sagittarius",
+      "capricorn",
+      "aquarius",
+      "pisces",
+    ].some((s) => lower.includes(s));
+
+    if (astroTitles.includes(lower) || isHouse || isSign) {
+      return "How it’s calculated: we use your birth date, time, and location to compute planetary positions in the tropical zodiac, then place them into Placidus houses. The Ascendant is the zodiac sign rising on the eastern horizon at the moment you were born.";
+    }
+    if (lower.includes("human design") || ["energy type", "strategy", "authority", "profile"].includes(lower)) {
+      return "How it’s calculated: Human Design uses astronomical positions at birth (and ~88 days before birth for the design chart). We compute gates, centers, type, profile, and authority from those positions.";
+    }
+    if (lower.includes("zodiac") || ["year animal", "yin/yang", "element"].includes(lower)) {
+      return "How it’s calculated: the Chinese zodiac is based on your birth year in a 12‑year cycle, with fixed Yin/Yang polarity and element determined by the traditional system.";
+    }
+    if (lower.includes("account")) {
+      return "How it’s calculated: account data comes from your inputed values in your user profile, check in the settings to view, verify or change your variables, it is important with correct city and time, all calculations depend heavliy on that.";
+    }
+    return "How it’s calculated: this insight is derived from the profile data you provided at birth (date, time, and place) and the relevant calculation rules for this system.";
   };
 
   useEffect(() => {
@@ -251,49 +348,49 @@ export default function App() {
   }, [modal]);
 
   const planetMeaning: Record<string, string> = {
-    Sun: "The Sun determines your ego, identity, and role in life. It’s the core of who you are.",
-    Moon: "The Moon rules your emotions, moods, and inner needs.",
-    Mercury: "Mercury governs how you think, communicate, and learn.",
-    Venus: "Venus rules how you love, what you value, and what attracts you.",
-    Mars: "Mars is how you assert yourself, act, and pursue what you want.",
-    Jupiter: "Jupiter is growth, optimism, and meaning.",
-    Saturn: "Saturn is responsibility, boundaries, and long‑term lessons.",
-    Uranus: "Uranus is change, freedom, and originality.",
-    Neptune: "Neptune is imagination, intuition, and ideals.",
-    Pluto: "Pluto is power, transformation, and deep change.",
-    "North Node": "The North Node is your growth direction and life theme.",
-    Lilith: "Lilith is your raw, untamed self-expression.",
-    Chiron: "Chiron is your wound and the path to healing.",
+    Sun: "The Sun is your inner fire—identity, purpose, and the role you grow into.",
+    Moon: "The Moon is your inner tide—feelings, needs, and what makes you feel safe.",
+    Mercury: "Mercury is your mind’s voice—how you learn, think, and translate reality.",
+    Venus: "Venus is your magnetism—love, values, and the beauty you move toward.",
+    Mars: "Mars is your spark—drive, desire, and the way you push forward.",
+    Jupiter: "Jupiter is your horizon—growth, faith, and the meaning you seek.",
+    Saturn: "Saturn is your backbone—discipline, boundaries, and long‑term lessons.",
+    Uranus: "Uranus is your lightning—change, freedom, and originality.",
+    Neptune: "Neptune is your dream‑sea—intuition, imagination, and ideals.",
+    Pluto: "Pluto is your underworld—power, depth, and transformation.",
+    "North Node": "The North Node is your compass—growth direction and life theme.",
+    Lilith: "Lilith is your untamed truth—raw instinct and bold self‑expression.",
+    Chiron: "Chiron is your tender edge—the wound that becomes wisdom.",
   };
 
   const signMeaning: Record<string, string> = {
-    Aries: "Aries is bold, direct, and pioneering.",
-    Taurus: "Taurus is steady, grounded, and loyal.",
-    Gemini: "Gemini is curious, quick, and communicative.",
-    Cancer: "Cancer is caring, sensitive, and protective.",
-    Leo: "Leo is warm, expressive, and proud.",
-    Virgo: "Virgo is precise, analytical, and improvement‑focused.",
-    Libra: "Libra is balanced, relational, and fair‑minded.",
-    Scorpio: "Scorpio is intense, deep, and transformative.",
-    Sagittarius: "Sagittarius is adventurous, optimistic, and freedom‑seeking.",
-    Capricorn: "Capricorn is disciplined, ambitious, and responsible.",
-    Aquarius: "Aquarius is original, visionary, and future‑oriented.",
-    Pisces: "Pisces is intuitive, empathetic, and imaginative.",
+    Aries: "Aries carries a spark: bold, direct, and pioneering.",
+    Taurus: "Taurus is the slow river: steady, grounded, and loyal.",
+    Gemini: "Gemini is wind‑quick: curious, agile, and communicative.",
+    Cancer: "Cancer is the hearth: caring, sensitive, and protective.",
+    Leo: "Leo is a warm sun: expressive, proud, and radiant.",
+    Virgo: "Virgo is the craft: precise, analytical, and improvement‑minded.",
+    Libra: "Libra is the balance point: relational and fair‑minded.",
+    Scorpio: "Scorpio is depth and alchemy: intense, private, transformative.",
+    Sagittarius: "Sagittarius is the open road: adventurous and freedom‑seeking.",
+    Capricorn: "Capricorn is the mountain path: disciplined and enduring.",
+    Aquarius: "Aquarius is the future pulse: original and visionary.",
+    Pisces: "Pisces is tide and dream: intuitive, empathetic, imaginative.",
   };
 
   const zodiacMeaning: Record<string, string> = {
-    Rat: "The Rat is clever, quick, and adaptive. For you, this can show up as fast problem‑solving.",
-    Ox: "The Ox is patient, loyal, and steady. For you, it can feel like deep endurance.",
-    Tiger: "The Tiger is bold, passionate, and independent. For you, it can feel like strong drive.",
-    Rabbit: "The Rabbit is sensitive, diplomatic, and gentle. For you, it can show as calm balance.",
-    Dragon: "The Dragon is powerful, magnetic, and visionary. For you, it can show as strong presence.",
-    Snake: "The Snake is intuitive, deep, and strategic. For you, it can feel like sharp insight.",
-    Horse: "The Horse is free, energetic, and moving forward. For you, it can feel like momentum.",
-    Goat: "The Goat is creative, empathetic, and harmonious. For you, it can feel like soft strength.",
-    Monkey: "The Monkey is playful, smart, and curious. For you, it can feel like creative agility.",
-    Rooster: "The Rooster is precise, proud, and clear. For you, it can show as focus and structure.",
-    Dog: "The Dog is loyal, fair, and protective. For you, it can feel like dependable support.",
-    Pig: "The Pig is warm, generous, and grounded. For you, it can feel like heart‑led presence.",
+    Rat: "The Rat is clever and quick; in you it can appear as nimble problem‑solving.",
+    Ox: "The Ox is steady and enduring; in you it can feel like quiet strength.",
+    Tiger: "The Tiger is bold and passionate; in you it can surge as fearless drive.",
+    Rabbit: "The Rabbit is gentle and diplomatic; in you it can soften the room.",
+    Dragon: "The Dragon is magnetic and visionary; in you it can feel like presence.",
+    Snake: "The Snake is intuitive and strategic; in you it can read between the lines.",
+    Horse: "The Horse is free and forward‑moving; in you it becomes momentum.",
+    Goat: "The Goat is creative and empathetic; in you it feels like soft strength.",
+    Monkey: "The Monkey is playful and bright; in you it turns to clever agility.",
+    Rooster: "The Rooster is precise and proud; in you it becomes clarity.",
+    Dog: "The Dog is loyal and protective; in you it feels like steadfast care.",
+    Pig: "The Pig is generous and grounded; in you it becomes warm presence.",
   };
 
   const zodiacMeta: Record<
@@ -363,6 +460,20 @@ export default function App() {
     ),
   };
 
+  const houseSvgIcon = (
+    <svg viewBox="0 0 48 48" aria-hidden="true">
+      <path d="M8 22L24 8l16 14" fill="none" stroke="currentColor" strokeWidth="2" />
+      <path d="M12 22v18h24V22" fill="currentColor" opacity="0.65" />
+    </svg>
+  );
+
+  const houseSvgIconSmall = (
+    <svg viewBox="0 0 48 48" aria-hidden="true">
+      <path d="M8 22L24 8l16 14" fill="none" stroke="currentColor" strokeWidth="2" />
+      <path d="M12 22v18h24V22" fill="currentColor" opacity="0.55" />
+    </svg>
+  );
+
   const houseMeaning: Record<number, string> = {
     1: "The 1st house is identity, presence, and first impression.",
     2: "The 2nd house is values, security, and resources.",
@@ -379,18 +490,18 @@ export default function App() {
   };
 
   const houseNames: Record<number, string> = {
-    1: "first house",
-    2: "second house",
-    3: "third house",
-    4: "fourth house",
-    5: "fifth house",
-    6: "sixth house",
-    7: "seventh house",
-    8: "eighth house",
-    9: "ninth house",
-    10: "tenth house",
-    11: "eleventh house",
-    12: "twelfth house",
+    1: "1st House",
+    2: "2nd House",
+    3: "3rd House",
+    4: "4th House",
+    5: "5th House",
+    6: "6th House",
+    7: "7th House",
+    8: "8th House",
+    9: "9th House",
+    10: "10th House",
+    11: "11th House",
+    12: "12th House",
   };
 
   const signTone: Record<string, string> = {
@@ -423,15 +534,559 @@ export default function App() {
     12: "subconscious patterns, solitude, and spiritual renewal.",
   };
 
+  const humanDesignTypeDetail: Record<string, string> = {
+    Generator:
+      "You’re built for sustainable output and mastery. Your energy ignites when something truly lights you up, and grows brighter the longer you stay aligned.",
+    "Manifesting Generator":
+      "You’re multi‑passionate and fast. You respond to what excites you, then move like wind—quick to pivot, quick to learn.",
+    Projector:
+      "You’re here to guide and refine. Your gift is seeing what others miss and directing energy rather than spending it.",
+    Manifestor:
+      "You’re an initiator. You’re built to spark new paths and open doors, then let others carry the momentum.",
+    Reflector:
+      "You’re a mirror and a barometer. Your energy reflects the people and places around you—alignment depends on where you are and who you’re with.",
+  };
+
+  const humanDesignAuthorityDetail: Record<string, string> = {
+    "Emotional Authority":
+      "Clarity arrives in waves. Your truest decisions come after the tide has moved through you, not in the first surge.",
+    "Sacral Authority":
+      "You decide in the moment with a visceral yes/no. Your body response is the truth before the mind gets involved.",
+    "Splenic Authority":
+      "Your intuition speaks softly and instantly. When you feel a quiet nudge, trust it—waiting too long can blur it.",
+    "Ego Authority":
+      "Your willpower guides you. If you can commit with a full‑body yes, it’s right; if not, it drains you.",
+    "Self‑Projected Authority":
+      "Your identity and direction are your compass. Speaking it out loud helps you hear what’s true.",
+    "Mental Authority":
+      "You need to talk it out with the right people and environment. Clarity comes from dialogue, not isolation.",
+    "Lunar Authority":
+      "You need a full cycle to decide. Time and observation reveal what’s correct for you.",
+  };
+
+  const humanDesignStrategyDetail: Record<string, string> = {
+    "Wait to Respond":
+      "Let life come to you, then answer with your gut or inner clarity. Pushing first creates resistance.",
+    "Wait to Respond, then Inform":
+      "Respond first, then inform those affected. This softens friction when you move quickly.",
+    "Wait for the Invitation":
+      "Recognition is your green light. The right invitations save you energy and open the right doors.",
+    Inform:
+      "You move best when you let people know what you’re about to do. It clears the path and lowers pushback.",
+    "Wait a Lunar Cycle":
+      "Give yourself time. Clarity arrives by observing how different options feel across a full cycle.",
+  };
+
+  const humanDesignProfileDetail: Record<string, string> = {
+    "1/3": "Researcher/Martyr: you learn by digging deep, then testing truth in real life.",
+    "1/4": "Researcher/Opportunist: you build solid foundations and share them through your network.",
+    "2/4": "Hermit/Opportunist: you need solitude to refine gifts, then share when invited.",
+    "2/5": "Hermit/Heretic: you’re called out for solutions—choose carefully where you answer the call.",
+    "3/5": "Martyr/Heretic: you learn by trial and error, then turn lessons into practical fixes.",
+    "3/6": "Martyr/Role Model: your early experiments become wisdom you live and teach.",
+    "4/6": "Opportunist/Role Model: relationships open doors; your path matures into leadership.",
+    "4/1": "Opportunist/Investigator: a stable core identity with influence through community.",
+    "5/1": "Heretic/Investigator: a practical problem‑solver anchored by solid facts.",
+    "5/2": "Heretic/Hermit: people project on you—clarity and boundaries keep you true.",
+    "6/2": "Role Model/Hermit: you step back to integrate, then emerge as a guide.",
+    "6/3": "Role Model/Martyr: your wisdom is forged through lived experience.",
+  };
+
+  const humanDesignProfileExamples: Record<string, string> = {
+    "1/3": "Example: You might research deeply first, then learn what works through hands‑on trial.",
+    "1/4": "Example: You build a solid base, then your network helps opportunities find you.",
+    "2/4": "Example: You need alone time to sharpen gifts, then share them when invited.",
+    "2/5": "Example: People look to you for solutions—choose commitments carefully.",
+    "3/5": "Example: You try, fail, adjust, and turn lessons into practical fixes.",
+    "3/6": "Example: Early life is experimentation; later life becomes mentoring.",
+    "4/6": "Example: Relationships open doors, and your path matures into leadership.",
+    "4/1": "Example: You influence through community while holding a stable core identity.",
+    "5/1": "Example: You’re asked to solve problems—your research keeps you grounded.",
+    "5/2": "Example: You’re called out for help, but you need clear boundaries.",
+    "6/2": "Example: You step back to integrate, then return as a quiet guide.",
+    "6/3": "Example: Your authority grows from lived experience and resilience.",
+  };
+
+  const humanDesignExamples: Record<string, string> = {
+    Projector:
+      "Example: You may thrive as a strategist, coach, or director—seeing how to optimize a team without doing all the doing.",
+    Generator:
+      "Example: When a project lights you up, you can outlast others and build real mastery.",
+    "Manifesting Generator":
+      "Example: You might start a task, find a faster path, and pivot quickly—this is natural.",
+    Manifestor:
+      "Example: You might initiate a new idea at work, then step back once it’s moving.",
+    Reflector:
+      "Example: You often sense when a room feels off and can guide others toward alignment.",
+  };
+
+  const buildHumanDesignNarrative = () => {
+    const type = insights?.summary_json?.human_design?.type ?? "";
+    const strategy = insights?.summary_json?.human_design?.strategy ?? "";
+    const authority = insights?.summary_json?.human_design?.authority ?? "";
+    const profile = insights?.summary_json?.human_design?.profile ?? "";
+    const role = insights?.summary_json?.human_design?.role ?? "";
+    const definition = insights?.human_design_json?.definition ?? "";
+
+    const parts = [
+      type ? `Your Energy Type is ${type}. ${humanDesignTypeDetail[type] ?? ""}` : "",
+      strategy ? `Your strategy is ${strategy}. ${humanDesignStrategyDetail[strategy] ?? ""}` : "",
+      authority ? `Your authority is ${authority}. ${humanDesignAuthorityDetail[authority] ?? ""}` : "",
+      profile
+        ? `Your profile is ${profile}${role ? ` (${role})` : ""}. ${humanDesignProfileDetail[profile] ?? ""}`
+        : "",
+      profile ? humanDesignProfileExamples[profile] ?? "" : "",
+      definition
+        ? `Your definition is ${definition}. It shapes how you integrate information and connect with others.`
+        : "",
+      type ? humanDesignExamples[type] ?? "" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    return parts;
+  };
+
+  const humanDesignTypeSignature: Record<string, string> = {
+    Projector: "Success",
+    Generator: "Satisfaction",
+    "Manifesting Generator": "Satisfaction",
+    Manifestor: "Peace",
+    Reflector: "Surprise",
+  };
+
+  const humanDesignTypeNotSelf: Record<string, string> = {
+    Projector: "Bitterness",
+    Generator: "Frustration",
+    "Manifesting Generator": "Frustration",
+    Manifestor: "Anger",
+    Reflector: "Disappointment",
+  };
+
+  const drawHdWave = useCallback(() => {
+    const canvas = hdCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const cssW = canvas.clientWidth;
+    const cssH = canvas.clientHeight;
+    const w = Math.floor(cssW * dpr);
+    const h = Math.floor(cssH * dpr);
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
+    }
+
+    ctx.clearRect(0, 0, w, h);
+
+    const pad = 18 * dpr;
+    const left = pad;
+    const right = w - pad;
+    const top = pad;
+    const bottom = h - pad;
+    const midY = (top + bottom) / 2;
+
+    const amp = (0.32 + Math.random() * 0.1) * (bottom - top);
+    const freq = 1.2 + Math.random() * 0.8;
+    const phase = Math.random() * Math.PI * 2;
+
+    ctx.lineWidth = 1 * dpr;
+    ctx.strokeStyle = "rgba(255,255,255,0.10)";
+    ctx.beginPath();
+    ctx.moveTo(left, top);
+    ctx.lineTo(right, top);
+    ctx.moveTo(left, midY);
+    ctx.lineTo(right, midY);
+    ctx.moveTo(left, bottom);
+    ctx.lineTo(right, bottom);
+    const cols = 6;
+    for (let i = 1; i < cols; i++) {
+      const x = left + (i * (right - left)) / cols;
+      ctx.moveTo(x, top);
+      ctx.lineTo(x, bottom);
+    }
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(255,255,255,0.75)";
+    ctx.font = `${12 * dpr}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+    ctx.textBaseline = "middle";
+    ctx.fillText("High", left, top - 8 * dpr);
+    ctx.fillText("Neutral", left, midY);
+    ctx.fillText("Low", left, bottom + 8 * dpr);
+
+    ctx.strokeStyle = "rgba(255,255,255,0.85)";
+    ctx.lineWidth = 2.2 * dpr;
+    ctx.beginPath();
+    const width = right - left;
+    const steps = 240;
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const x = left + t * width;
+      const y =
+        midY -
+        Math.sin(t * Math.PI * 2 * freq + phase) * amp -
+        Math.sin(t * Math.PI * 2 * (freq * 0.33) + phase * 0.7) * (amp * 0.18);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    ctx.strokeStyle = "rgba(255,255,255,0.20)";
+    ctx.lineWidth = 10 * dpr;
+    ctx.beginPath();
+    ctx.moveTo(left, midY);
+    ctx.lineTo(right, midY);
+    ctx.stroke();
+
+    ctx.strokeStyle = "rgba(255,255,255,0.92)";
+    ctx.lineWidth = 2.4 * dpr;
+    ctx.stroke();
+  }, []);
+
+  useEffect(() => {
+    if (!isHdOpen) return;
+    drawHdWave();
+    const handleResize = () => drawHdWave();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [drawHdWave, isHdOpen]);
+
+  const hdInsights = isHumanDesignPage ? hdPageInsights : insights;
+  const hdType = hdInsights?.summary_json?.human_design?.type ?? "–";
+  const hdStrategy = hdInsights?.summary_json?.human_design?.strategy ?? "–";
+  const hdAuthority = hdInsights?.summary_json?.human_design?.authority ?? "–";
+  const hdProfile = hdInsights?.summary_json?.human_design?.profile ?? "–";
+  const hdRole = hdInsights?.summary_json?.human_design?.role ?? "";
+  const hdDefinition = hdInsights?.human_design_json?.definition ?? "–";
+  const hdProfileLabel =
+    hdProfile !== "–" ? `${hdProfile}${hdRole ? ` (${hdRole})` : ""}` : "–";
+  const hdTitleBits = [hdType, hdAuthority, hdProfileLabel, hdDefinition].filter(
+    (value) => value && value !== "–"
+  );
+  const hdDeepDiveTitle = hdTitleBits.length
+    ? `Riktigt nördig Deep Dive (${hdTitleBits.join(" • ")})`
+    : "Riktigt nördig Deep Dive";
+  const isEmotionalAuthority = hdAuthority.toLowerCase().includes("emotional");
+  const isSplitDefinition = hdDefinition.toLowerCase().includes("split");
+  const profileDetail = hdProfile !== "–" ? humanDesignProfileDetail[hdProfile] ?? "" : "";
+  const profileExample = hdProfile !== "–" ? humanDesignProfileExamples[hdProfile] ?? "" : "";
+  const strategyDetail =
+    hdStrategy !== "–" ? humanDesignStrategyDetail[hdStrategy] ?? "" : "";
+  const authorityDetail =
+    hdAuthority !== "–" ? humanDesignAuthorityDetail[hdAuthority] ?? "" : "";
+  const typeSignature = hdType !== "–" ? humanDesignTypeSignature[hdType] ?? "" : "";
+  const typeNotSelf = hdType !== "–" ? humanDesignTypeNotSelf[hdType] ?? "" : "";
+  const hdIncarnation =
+    hdInsights?.human_design_json?.incarnationCross?.fullName ||
+    hdInsights?.human_design_json?.incarnationCross?.name ||
+    "–";
+  const hdProfileSource = isHumanDesignPage ? hdPageProfile : profileInfo;
+  const hdEmail = hdProfileSource?.email ?? "";
+
+  const renderHdBodygraph = (svgRef?: React.Ref<SVGSVGElement>) => (
+    <svg className="hd-bodygraph" viewBox="0 0 360 520" role="img" ref={svgRef}>
+      <g className="hd-channels">
+        {hdChannels.map((ch, idx) => {
+          const centerPos: Record<HdCenterKey, { x: number; y: number }> = {
+            head: { x: 180, y: 40 },
+            ajna: { x: 180, y: 110 },
+            throat: { x: 180, y: 185 },
+            g: { x: 180, y: 260 },
+            ego: { x: 250, y: 250 },
+            spleen: { x: 110, y: 250 },
+            sacral: { x: 180, y: 330 },
+            solar: { x: 260, y: 330 },
+            root: { x: 180, y: 420 },
+          };
+          const p1 = centerPos[ch.c1];
+          const p2 = centerPos[ch.c2];
+          return (
+            <line
+              key={`${ch.c1}-${ch.c2}-${idx}`}
+              x1={p1.x}
+              y1={p1.y}
+              x2={p2.x}
+              y2={p2.y}
+              className="hd-channel"
+            />
+          );
+        })}
+      </g>
+      <g className="hd-centers">
+        <polygon
+          className={`hd-center ${hdDefinedCenters.has("head") ? "defined" : ""}`}
+          points="180,10 150,60 210,60"
+        />
+        <polygon
+          className={`hd-center ${hdDefinedCenters.has("ajna") ? "defined" : ""}`}
+          points="150,90 210,90 180,140"
+        />
+        <rect
+          className={`hd-center ${hdDefinedCenters.has("throat") ? "defined" : ""}`}
+          x="145"
+          y="155"
+          width="70"
+          height="60"
+          rx="8"
+        />
+        <polygon
+          className={`hd-center ${hdDefinedCenters.has("g") ? "defined" : ""}`}
+          points="180,220 220,260 180,300 140,260"
+        />
+        <polygon
+          className={`hd-center ${hdDefinedCenters.has("ego") ? "defined" : ""}`}
+          points="240,235 270,255 240,275"
+        />
+        <polygon
+          className={`hd-center ${hdDefinedCenters.has("spleen") ? "defined" : ""}`}
+          points="120,235 90,255 120,275"
+        />
+        <rect
+          className={`hd-center ${hdDefinedCenters.has("sacral") ? "defined" : ""}`}
+          x="145"
+          y="300"
+          width="70"
+          height="60"
+          rx="8"
+        />
+        <polygon
+          className={`hd-center ${hdDefinedCenters.has("solar") ? "defined" : ""}`}
+          points="250,300 290,330 250,360 210,330"
+        />
+        <rect
+          className={`hd-center ${hdDefinedCenters.has("root") ? "defined" : ""}`}
+          x="145"
+          y="390"
+          width="70"
+          height="60"
+          rx="8"
+        />
+      </g>
+    </svg>
+  );
+
+  const hdReportData = useMemo(() => {
+    const gates = hdInsights?.human_design_json?.gates ?? {};
+    const personality = gates.personality ?? {};
+    const design = gates.design ?? {};
+    const planetOrder = [
+      "sun",
+      "earth",
+      "moon",
+      "northNode",
+      "southNode",
+      "mercury",
+      "venus",
+      "mars",
+      "jupiter",
+      "saturn",
+      "uranus",
+      "neptune",
+      "pluto",
+    ];
+    const toGateEntry = (source: Record<string, any>, type: "P" | "D") =>
+      planetOrder
+        .map((planet) => {
+          const item = source[planet];
+          if (!item) return null;
+          return {
+            gate: item.gate ?? null,
+            line: item.line ?? null,
+            planet,
+            type,
+          };
+        })
+        .filter(Boolean) as Array<{ gate: number; line: number; planet: string; type: "P" | "D" }>;
+
+    const personalityGates = toGateEntry(personality, "P");
+    const designGates = toGateEntry(design, "D");
+    const pGateSet = new Set(personalityGates.map((g) => g.gate));
+    const dGateSet = new Set(designGates.map((g) => g.gate));
+
+    const definedCenters =
+      (hdInsights?.human_design_json?.centers?.definedNames ?? [])
+        .map((name: string) => normalizeCenterName(name))
+        .filter(Boolean) as HdCenterKey[];
+
+    const activeChannels = (hdInsights?.human_design_json?.channels ?? [])
+      .map((ch: any) => {
+        const centers = Array.isArray(ch?.centers) ? ch.centers : [];
+        const c1 = centers[0] ? normalizeCenterName(String(centers[0])) : null;
+        const c2 = centers[1] ? normalizeCenterName(String(centers[1])) : null;
+        if (!c1 || !c2 || c1 === c2) return null;
+        const gates = Array.isArray(ch?.gates) ? ch.gates : [];
+        const hasP = gates.some((g: number) => pGateSet.has(g));
+        const hasD = gates.some((g: number) => dGateSet.has(g));
+        const type = hasP && hasD ? "B" : hasP ? "P" : "D";
+        return { centers: [c1, c2], gates, type };
+      })
+      .filter(Boolean) as Array<{ centers: HdCenterKey[]; gates: number[]; type: string }>;
+
+    return {
+      summary: {
+        type: hdType,
+        profile: hdProfileLabel,
+        definition: hdDefinition,
+        authority: hdAuthority,
+        strategy: hdStrategy,
+        notSelf: hdInsights?.human_design_json?.type?.notSelf ?? typeNotSelf ?? "—",
+        incarnationCross: hdIncarnation,
+      },
+      user: {
+        username:
+          hdProfileSource?.username ??
+          hdProfileSource?.name ??
+          profileInfo?.username ??
+          profileInfo?.name ??
+          (hdPageUserId || "—"),
+        birthDate:
+          hdProfileSource?.birth_date ??
+          profileInfo?.birth_date ??
+          (profileForm.birthDate || null) ??
+          "—",
+        birthTime:
+          hdProfileSource?.birth_time ??
+          profileInfo?.birth_time ??
+          (profileForm.birthTime || null) ??
+          (hdProfileSource?.unknown_time || profileInfo?.unknown_time ? "Unknown" : "—"),
+        tzOffsetMinutes:
+          typeof hdInsights?.summary_json?.meta?.tz_offset_minutes === "number"
+            ? hdInsights.summary_json.meta.tz_offset_minutes
+            : typeof hdProfileSource?.tz_offset_minutes === "number"
+              ? hdProfileSource.tz_offset_minutes
+              : typeof profileInfo?.tz_offset_minutes === "number"
+                ? profileInfo.tz_offset_minutes
+                : null,
+        city:
+          hdProfileSource?.birth_place ??
+          profileInfo?.birth_place ??
+          (profileForm.birthPlace || null) ??
+          "—",
+        lat: (() => {
+          const raw =
+            hdProfileSource?.birth_lat ??
+            profileInfo?.birth_lat ??
+            null;
+          const num = typeof raw === "number" ? raw : raw !== null && raw !== undefined ? Number(raw) : NaN;
+          return Number.isFinite(num) ? num : null;
+        })(),
+        lng: (() => {
+          const raw =
+            hdProfileSource?.birth_lng ??
+            profileInfo?.birth_lng ??
+            null;
+          const num = typeof raw === "number" ? raw : raw !== null && raw !== undefined ? Number(raw) : NaN;
+          return Number.isFinite(num) ? num : null;
+        })(),
+      },
+      chart: {
+        activeChannels,
+        definedCenters,
+        personalityGates,
+        designGates,
+      },
+    };
+  }, [
+    hdAuthority,
+    hdDefinition,
+    hdIncarnation,
+    hdProfileLabel,
+    hdStrategy,
+    hdType,
+    hdProfileSource,
+    hdInsights?.human_design_json,
+    profileInfo?.birth_date,
+    profileInfo?.birth_time,
+    profileInfo?.birth_place,
+    profileInfo?.birth_lat,
+    profileInfo?.birth_lng,
+    profileInfo?.tz_offset_minutes,
+    profileInfo?.unknown_time,
+    profileInfo?.username,
+    profileInfo?.name,
+    profileForm.birthDate,
+    profileForm.birthTime,
+    profileForm.birthPlace,
+    hdPageUserId,
+    typeNotSelf,
+  ]);
+
+  const hdReportHash = useMemo(() => {
+    try {
+      return encodeURIComponent(JSON.stringify(hdReportData));
+    } catch {
+      return "";
+    }
+  }, [hdReportData]);
+
+  const hdReportUrl = hdReportHash
+    ? `/standalone-report.html#data=${hdReportHash}`
+    : "/standalone-report.html";
+  const hdReportPrintUrl = hdReportHash
+    ? `/standalone-report.html#data=${hdReportHash}&print=1`
+    : "/standalone-report.html#print=1";
+
+  const hdEmailLink = useMemo(() => {
+    const subject = "My Human Design Report";
+    const body = [
+      "Här är min Human Design‑rapport:",
+      "",
+      `Type: ${hdType}`,
+      `Strategy: ${hdStrategy}`,
+      `Authority: ${hdAuthority}`,
+      `Profile: ${hdProfileLabel}`,
+      `Definition: ${hdDefinition}`,
+      `Incarnation Cross: ${hdIncarnation}`,
+      "",
+      `Rapport: ${window.location.origin}${hdReportUrl}`,
+    ].join("\n");
+    const to = hdEmail ? encodeURIComponent(hdEmail) : "";
+    return `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  }, [
+    hdAuthority,
+    hdDefinition,
+    hdEmail,
+    hdIncarnation,
+    hdProfileLabel,
+    hdReportUrl,
+    hdStrategy,
+    hdType,
+  ]);
+  const hdDefinedCenters = useMemo(() => {
+    const names = hdInsights?.human_design_json?.centers?.definedNames ?? [];
+    const set = new Set<HdCenterKey>();
+    names.forEach((n: string) => {
+      const key = normalizeCenterName(n);
+      if (key) set.add(key);
+    });
+    return set;
+  }, [hdInsights?.human_design_json]);
+  const hdChannels = useMemo(() => {
+    const list = Array.isArray(hdInsights?.human_design_json?.channels)
+      ? hdInsights?.human_design_json?.channels
+      : [];
+    return list
+      .map((ch: any) => {
+        const centers = Array.isArray(ch?.centers) ? ch.centers : [];
+        const c1 = centers[0] ? normalizeCenterName(String(centers[0])) : null;
+        const c2 = centers[1] ? normalizeCenterName(String(centers[1])) : null;
+        if (!c1 || !c2 || c1 === c2) return null;
+        return { c1, c2 };
+      })
+      .filter(Boolean) as Array<{ c1: HdCenterKey; c2: HdCenterKey }>;
+  }, [hdInsights?.human_design_json]);
+
   const describeSign = (sign?: string | null) => {
     if (!sign) return "The sign shows how the energy expresses itself.";
     return signMeaning[sign] ?? "The sign shows how the energy expresses itself.";
   };
 
   const describeSignDeep = (sign?: string | null) => {
-    if (!sign) return "The sign shows how the energy expresses itself.";
+    if (!sign) return "The sign is the style of the energy—how it wants to move.";
     const tone = signTone[sign] ?? "expresses in its own unique way.";
-    return `${signMeaning[sign] ?? "The sign shows how the energy expresses itself."} It often ${tone}`;
+    return `${signMeaning[sign] ?? "The sign is the style of the energy."} It often ${tone}`;
   };
 
   const describePlanet = (planetName: string, sign?: string | null, house?: number | null) => {
@@ -445,10 +1100,11 @@ export default function App() {
   const describePlanetDeep = (planetName: string, sign?: string | null, house?: number | null) => {
     const planetText = planetMeaning[planetName] ?? "This planet describes a life theme.";
     const signText = describeSignDeep(sign);
-    const houseText = house ? houseMeaning[house] ?? "" : "";
     const houseFocus = house ? houseDetail[house] ?? "a key life area." : "a key life area.";
-    const houseSuffix = house ? ` It lands in the ${houseNames[house] ?? `house ${house}`}, which rules ${houseFocus}` : "";
-    return `${planetText} ${signText}${houseSuffix} ${houseText} For you, this shows where the energy is strongest and how you naturally express it.`.trim();
+    const houseSuffix = house
+      ? ` It lands in the ${houseNames[house] ?? `house ${house}`} — the area of ${houseFocus}`
+      : "";
+    return `${planetText} ${signText}${houseSuffix} For you, this is where the story gathers its heat and asks to be lived.`.trim();
   };
 
   const describeAscendant = (sign?: string | null) => {
@@ -458,7 +1114,7 @@ export default function App() {
 
   const describeAscendantDeep = (sign?: string | null) => {
     const signText = describeSignDeep(sign);
-    return `The Ascendant is the “mask” you present to people and your first impression. ${signText} It shapes your style, presence, and the energy you project when you enter a room.`;
+    return `The Ascendant is the doorway of your chart—how the world first meets you. ${signText} It shapes your style, presence, and the energy you cast when you enter a room.`;
   };
 
   const ordinalHouse = (house?: number | null) => {
@@ -512,6 +1168,18 @@ export default function App() {
     if (!base) return `${window.location.origin}/api/profile/insights/calc`;
     const clean = base.replace(/\/$/, "");
     return clean.endsWith("/api") ? `${clean}/profile/insights/calc` : `${clean}/api/profile/insights/calc`;
+  }, []);
+  const insightsByUserUrl = useMemo(() => {
+    const base = (import.meta.env.VITE_API_URL || "").trim();
+    if (!base) return `${window.location.origin}/api/profile/insights`;
+    const clean = base.replace(/\/$/, "");
+    return clean.endsWith("/api") ? `${clean}/profile/insights` : `${clean}/api/profile/insights`;
+  }, []);
+  const profileByUserUrl = useMemo(() => {
+    const base = (import.meta.env.VITE_API_URL || "").trim();
+    if (!base) return `${window.location.origin}/api/profile`;
+    const clean = base.replace(/\/$/, "");
+    return clean.endsWith("/api") ? `${clean}/profile` : `${clean}/api/profile`;
   }, []);
   const authBaseUrl = useMemo(() => {
     const base = (import.meta.env.VITE_AUTHENTIK_URL || "https://auth.sputnet.space").trim();
@@ -618,24 +1286,82 @@ export default function App() {
     loadProfile();
   }, [profileUrl]);
 
+  const fetchInsightsOnce = useCallback(async (setLoading = true) => {
+    try {
+      if (setLoading) setInsightsLoading(true);
+      const res = await fetch(insightsUrl, { credentials: "include", cache: "no-store" });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.ok && data.insights) {
+        setInsights(data.insights as ProfileInsights);
+        return data.insights as ProfileInsights;
+      } else if (!res.ok && res.status !== 401) {
+        setInsightsError(data?.error || "Kunde inte läsa profiler.");
+      }
+    } catch {
+      setInsightsError("Kunde inte läsa profiler.");
+    } finally {
+      if (setLoading) setInsightsLoading(false);
+    }
+    return null;
+  }, [insightsUrl]);
+
   useEffect(() => {
-    const loadInsights = async () => {
-      try {
-        const res = await fetch(insightsUrl, { credentials: "include" });
-        const data = await res.json().catch(() => null);
-        if (res.ok && data?.ok && data.insights) {
-          setInsights(data.insights as ProfileInsights);
-        } else if (!res.ok && res.status !== 401) {
-          setInsightsError(data?.error || "Kunde inte läsa profiler.");
+    fetchInsightsOnce();
+  }, [fetchInsightsOnce]);
+
+  const pollInsights = useCallback(
+    async (attempts = 4, delayMs = 700) => {
+      for (let i = 0; i < attempts; i += 1) {
+        const next = await fetchInsightsOnce(i === 0);
+        if (next) return next;
+        if (i < attempts - 1) {
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
         }
-      } catch {
-        setInsightsError("Kunde inte läsa profiler.");
+      }
+      return null;
+    },
+    [fetchInsightsOnce]
+  );
+
+  useEffect(() => {
+    if (!isHumanDesignPage || !hdPageUserId) return;
+    let active = true;
+    const loadHdPageInsights = async () => {
+      try {
+        setHdPageLoading(true);
+        setHdPageError(null);
+        const [insightsRes, profileRes] = await Promise.all([
+          fetch(`${insightsByUserUrl}/${encodeURIComponent(hdPageUserId)}`, {
+            credentials: "include",
+          }),
+          fetch(`${profileByUserUrl}/${encodeURIComponent(hdPageUserId)}`, {
+            credentials: "include",
+          }),
+        ]);
+        const insightsData = await insightsRes.json().catch(() => null);
+        const profileData = await profileRes.json().catch(() => null);
+        if (!insightsRes.ok || !insightsData?.ok) {
+          throw new Error(insightsData?.error || "Kunde inte läsa insights.");
+        }
+        if (active) {
+          setHdPageInsights(insightsData.insights ?? null);
+          setHdPageProfile(profileData?.profile ?? null);
+        }
+      } catch (err) {
+        if (active) {
+          setHdPageError(err instanceof Error ? err.message : "Kunde inte läsa insights.");
+          setHdPageInsights(null);
+          setHdPageProfile(null);
+        }
       } finally {
-        setInsightsLoading(false);
+        if (active) setHdPageLoading(false);
       }
     };
-    loadInsights();
-  }, [insightsUrl]);
+    loadHdPageInsights();
+    return () => {
+      active = false;
+    };
+  }, [hdPageUserId, insightsByUserUrl, isHumanDesignPage, profileByUserUrl]);
 
   useEffect(() => {
     const query = profileForm.birthPlace.trim();
@@ -871,6 +1597,10 @@ export default function App() {
       setProfileError("Fyll i födelsedatum och födelseplats först.");
       return;
     }
+    if (!profileForm.birthLat.trim() || !profileForm.birthLng.trim()) {
+      setProfileError("Välj plats från listan eller ange koordinater.");
+      return;
+    }
       setProfileStatus("Saving...");
     setProfileError(null);
     const unknownTime = profileForm.unknownTime || !profileForm.birthTime;
@@ -918,13 +1648,15 @@ export default function App() {
         const calcRes = await fetch(insightsCalcUrl, {
           method: "POST",
           credentials: "include",
+          cache: "no-store",
         });
         const calcData = await calcRes.json().catch(() => null);
         if (!calcRes.ok || !calcData?.ok) {
           setProfileStatus("Saved, but calculation failed.");
         } else {
           setProfileStatus("Saved and calculated.");
-          if (calcData.insights) setInsights(calcData.insights as ProfileInsights);
+          // Always fetch the persisted insights shape after calc completes.
+          await pollInsights();
         }
       } catch {
         setProfileStatus("Saved, but calculation failed.");
@@ -951,11 +1683,11 @@ export default function App() {
       <nav className="top-nav">
         <div className="brand">CHKN</div>
         <div className="nav-links">
-          <a className={isProfilePage || isSettingsPage ? "nav-link" : "nav-link active"} href="/">
+          <a className={isLobbyPage ? "nav-link active" : "nav-link"} href="/lobby">
             Lobby
           </a>
           <a className={isProfilePage ? "nav-link active" : "nav-link"} href="/profile">
-            Profil
+            Profile
           </a>
           <a className={isSettingsPage ? "nav-link active" : "nav-link"} href="/settings">
             Settings
@@ -974,9 +1706,12 @@ export default function App() {
             >
               <div className="modal" onClick={(e) => e.stopPropagation()}>
                 <div className="modal-header">
-                  <div>
-                    <h3>{modal.title}</h3>
+                  <div className="modal-title">
+                    {modal.icon ? <span className="modal-icon">{modal.icon}</span> : null}
+                    <div>
+                      <h3>{modal.title}</h3>
                     {modal.subtitle ? <p className="modal-subtitle">{modal.subtitle}</p> : null}
+                    </div>
                   </div>
                   <button
                     className="modal-close"
@@ -989,6 +1724,7 @@ export default function App() {
                 </div>
                 <div className="modal-body">
                   <p>{modal.body}</p>
+                  <p className="modal-note">{getModalCalcNote(modal.title)}</p>
                   {modal.actions?.length ? (
                     <div className="modal-actions">
                       {modal.actions.map((action) => (
@@ -1004,6 +1740,50 @@ export default function App() {
                       ))}
                     </div>
                   ) : null}
+                </div>
+              </div>
+            </div>
+          ) : null}
+          {isHdChartOpen ? (
+            <div
+              className="modal-backdrop"
+              role="dialog"
+              aria-modal="true"
+              onClick={() => setIsHdChartOpen(false)}
+            >
+              <div className="modal hd-modal" onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header">
+                  <div className="modal-title">
+                    <div>
+                      <h3>Human Design Chart</h3>
+                      <p className="modal-subtitle">
+                        Genererad från din födelsedata (födelsedatum, tid och plats).
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    className="modal-close"
+                    onClick={() => setIsHdChartOpen(false)}
+                    aria-label="Stäng"
+                    title="Stäng"
+                  >
+                    ×
+                  </button>
+                </div>
+                <div className="modal-body hd-modal-body">
+                  <iframe
+                    className="hd-report-frame"
+                    title="Human Design Report"
+                    src={hdReportUrl}
+                  />
+                  <div className="modal-actions hd-modal-actions">
+                    <a className="btn-primary" href={hdReportPrintUrl} target="_blank" rel="noreferrer">
+                      Ladda ner rapport (PDF)
+                    </a>
+                    <a className="btn-ghost" href={hdEmailLink}>
+                      Skicka till min email
+                    </a>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1159,246 +1939,314 @@ export default function App() {
             <p className="eyebrow">Your profile</p>
 
           <div className="summary-row">
-          <button
-            type="button"
-            className="summary-card account-card"
-            onClick={() =>
-              openModal(
-                "Account",
-                "Your username and email are managed in Authentik. You can view or update security settings there.",
-                undefined,
-                [{ label: "Open account page", href: `${authBaseUrl}/if/user/` }]
-              )
-            }
-          >
-            <h3>Account</h3>
-            <div className="summary-items">
-              <div className="summary-item">
-                <span className="summary-icon">👤</span>
-                <div>
-                  <p className="summary-label">Username</p>
-                  <p className="summary-value">{profileInfo?.username ?? "—"}</p>
+            <button
+              type="button"
+              className="summary-card account-card"
+              onClick={() =>
+                openModal(
+                  "Account",
+                  "Your username and email are managed in Sputnet's SpaceDatabase. You can view or update your security  and other settings there.",
+                  undefined,
+                  [{ label: "Open account page", href: `${authBaseUrl}/if/user/` }]
+                )
+              }
+            >
+              <div className="summary-card-header">
+                <h3>Account</h3>
+              </div>
+              <div className="summary-items">
+                <div className="summary-item">
+                  <button
+                    type="button"
+                    className="summary-icon avatar-icon"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openModal(
+                        "Account avatar",
+                        `Your avatar is tied to your Ytzy profile.\n\nUsername: ${profileInfo?.username ?? "—"}\nEmail: ${profileInfo?.email ?? "—"}\n\nTo change avatar or account details, open your Sputnet Space User Page.`,
+                        undefined,
+                        [{ label: "Open account page", href: `${authBaseUrl}/if/user/` }],
+                        <img
+                          src={avatarUrl}
+                          alt={profileInfo?.username ? `${profileInfo.username} avatar` : "Avatar"}
+                          onError={(ev) => {
+                            ev.currentTarget.src = "/avatars/Default.jpg";
+                          }}
+                        />
+                      );
+                    }}
+                  >
+                    <img
+                      src={avatarUrl}
+                      alt={profileInfo?.username ? `${profileInfo.username} avatar` : "Avatar"}
+                      onError={(e) => {
+                        e.currentTarget.src = "/avatars/Default.jpg";
+                      }}
+                    />
+                  </button>
+                  <div>
+                    <p className="summary-label">Username</p>
+                    <p className="summary-value">{profileInfo?.username ?? "—"}</p>
+                  </div>
+                </div>
+                <div className="summary-item">
+                  <span className="summary-icon">✉</span>
+                  <div>
+                    <p className="summary-label">Email</p>
+                    <p className="summary-value">
+                      {profileInfo?.email ? (
+                        <a href={`mailto:${profileInfo.email}`}>Email</a>
+                      ) : (
+                        "—"
+                      )}
+                    </p>
+                  </div>
+                </div>
+                <div className="summary-item">
+                  <span className="summary-icon">✎</span>
+                  <div>
+                    <p className="summary-label">Edit</p>
+                    <p className="summary-value">Change account</p>
+                  </div>
                 </div>
               </div>
-              <div className="summary-item">
-                <span className="summary-icon">✉</span>
-                <div>
-                  <p className="summary-label">Email</p>
-                  <p className="summary-value">{profileInfo?.email ?? "—"}</p>
-                </div>
-              </div>
-            </div>
-          </button>
-          <div className="summary-card">
-            <h3>Astro</h3>
-            <div className="summary-items">
-              <button
-                type="button"
-                className="summary-item"
-                onClick={() =>
-                  openModal(
-                    "Sun",
-                    `${describePlanetDeep(
-                      "Sun",
-                      insights?.summary_json?.astrology?.sun ?? null,
-                      null
-                    )} Your Sun sign describes how you shine and lead in life, and what energizes you at your core.`,
-                    insights?.summary_json?.astrology?.sun ?? undefined
-                  )
-                }
-              >
-                <span className="summary-icon">☉</span>
-                <div>
-                  <p className="summary-label">Sun</p>
-                  <p className="summary-value">
-                    <span className="summary-sign">{signSymbolFor(insights?.summary_json?.astrology?.sun ?? null)}</span>
-                    {insights?.summary_json?.astrology?.sun ?? "–"}
-                  </p>
-                </div>
-              </button>
-              <button
-                type="button"
-                className="summary-item"
-                onClick={() =>
-                  openModal(
-                    "Moon",
-                    `${describePlanetDeep(
-                      "Moon",
-                      insights?.summary_json?.astrology?.moon ?? null,
-                      null
-                    )} Your Moon sign shows how you process feelings and what makes you feel safe.`,
-                    insights?.summary_json?.astrology?.moon ?? undefined
-                  )
-                }
-              >
-                <span className="summary-icon">☾</span>
-                <div>
-                  <p className="summary-label">Moon</p>
-                  <p className="summary-value">
-                    <span className="summary-sign">{signSymbolFor(insights?.summary_json?.astrology?.moon ?? null)}</span>
-                    {insights?.summary_json?.astrology?.moon ?? "–"}
-                  </p>
-                </div>
-              </button>
-              <button
-                type="button"
-                className="summary-item"
-                onClick={() =>
-                  openModal(
-                    "Ascendant",
-                    `${describeAscendantDeep(insights?.summary_json?.astrology?.ascendant ?? null)} It often colors your style and the immediate vibe you give off.`,
-                    insights?.summary_json?.astrology?.ascendant ?? undefined
-                  )
-                }
-              >
-                <span className="summary-icon">↥</span>
-                <div>
-                  <p className="summary-label">Ascendant</p>
-                  <p className="summary-value">
-                    <span className="summary-sign">{signSymbolFor(insights?.summary_json?.astrology?.ascendant ?? null)}</span>
-                    {insights?.summary_json?.astrology?.ascendant ?? "–"}
-                  </p>
-                </div>
-              </button>
-            </div>
-          </div>
-
-          <div className="summary-card">
-            <h3>Human Design</h3>
-            <div className="summary-items">
-              <button
-                type="button"
-                className="summary-item"
-                onClick={() =>
-                  openModal(
-                    "Energy Type",
-                    `${(
-                      insights?.human_design_json?.type?.description ||
-                      "Energy type describes your overall life force and how you best interact with the world."
-                    )} For you, this is your baseline way of operating and how others feel your energy.`
-                  )
-                }
-              >
-                <span className="summary-icon">⚡</span>
-                <div>
-                  <p className="summary-label">Energy Type</p>
-                  <p className="summary-value">{insights?.summary_json?.human_design?.type ?? "–"}</p>
-                </div>
-              </button>
-              <button
-                type="button"
-                className="summary-item"
-                onClick={() =>
-                  openModal(
-                    "Strategy",
-                    `${(
-                      insights?.human_design_json?.type?.strategy ||
-                      insights?.summary_json?.human_design?.strategy ||
-                      "Strategy is your practical path for decisions and less resistance."
-                    )} It’s the path that reduces friction and helps you align your actions.`
-                  )
-                }
-              >
-                <span className="summary-icon">↳</span>
-                <div>
-                  <p className="summary-label">Strategy</p>
-                  <p className="summary-value">
-                    {insights?.summary_json?.human_design?.strategy ?? "–"}
-                  </p>
-                </div>
-              </button>
-              <button
-                type="button"
-                className="summary-item"
-                onClick={() =>
-                  openModal(
-                    "Authority",
-                    `${(
-                      insights?.human_design_json?.authority?.description ||
-                      "Authority shows where your most reliable inner compass lives."
-                    )} It’s your most trusted decision‑making center over time.`
-                  )
-                }
-              >
-                <span className="summary-icon">◎</span>
-                <div>
-                  <p className="summary-label">Authority</p>
-                  <p className="summary-value">
-                    {insights?.summary_json?.human_design?.authority ?? "–"}
-                  </p>
-                </div>
-              </button>
-            </div>
-          </div>
-
-          <div className="summary-card zodiac-card">
-            <h3>Chinese zodiac</h3>
-            <div className="summary-items">
-              <div className="zodiac-stack">
+            </button>
+            <div className="summary-card">
+              <h3>Astro</h3>
+              <div className="summary-items">
                 <button
                   type="button"
-                  className="summary-item zodiac-row-button"
+                  className="summary-item"
                   onClick={() =>
                     openModal(
-                      "Year animal",
-                      `${zodiacMeaning[insights?.summary_json?.chinese_zodiac ?? ""] || "Your year animal is based on your birth year and reflects archetypal traits in Chinese tradition."} ${
-                        zodiacMeta[insights?.summary_json?.chinese_zodiac ?? ""] ?
-                          `\n\nAnimal: ${zodiacMeta[insights?.summary_json?.chinese_zodiac ?? ""]!.animalChar}\nEarthly Branch: ${zodiacMeta[insights?.summary_json?.chinese_zodiac ?? ""]!.earthlyBranch}\nTrine: ${zodiacMeta[insights?.summary_json?.chinese_zodiac ?? ""]!.trine}` :
-                          ""
-                      }`
+                      "Sun",
+                      `${describePlanetDeep(
+                        "Sun",
+                        insights?.summary_json?.astrology?.sun ?? null,
+                        null
+                      )} Your Sun sign describes how you shine and lead in life, and what energizes you at your core.`,
+                      insights?.summary_json?.astrology?.sun ?? undefined
                     )
                   }
                 >
-                  <span className="summary-icon zodiac-icon">
-                    {zodiacIcons[insights?.summary_json?.chinese_zodiac ?? ""] ?? "🐉"}
-                  </span>
+                  <span className="summary-icon">☉</span>
                   <div>
-                    <p className="summary-label">Year animal</p>
-                    <p className="summary-value">{insights?.summary_json?.chinese_zodiac ?? "–"}</p>
+                    <p className="summary-label">Sun</p>
+                    <p className="summary-value">
+                      <span className="summary-sign">{signSymbolFor(insights?.summary_json?.astrology?.sun ?? null)}</span>
+                      {insights?.summary_json?.astrology?.sun ?? "–"}
+                    </p>
                   </div>
                 </button>
-                {zodiacMeta[insights?.summary_json?.chinese_zodiac ?? ""] ? (
-                  <>
-                    <button
-                      type="button"
-                      className="summary-item zodiac-row-button"
-                      onClick={() =>
+                <button
+                  type="button"
+                  className="summary-item"
+                  onClick={() =>
+                    openModal(
+                      "Moon",
+                      `${describePlanetDeep(
+                        "Moon",
+                        insights?.summary_json?.astrology?.moon ?? null,
+                        null
+                      )} Your Moon sign shows how you process feelings and what makes you feel safe.`,
+                      insights?.summary_json?.astrology?.moon ?? undefined
+                    )
+                  }
+                >
+                  <span className="summary-icon">☾</span>
+                  <div>
+                    <p className="summary-label">Moon</p>
+                    <p className="summary-value">
+                      <span className="summary-sign">{signSymbolFor(insights?.summary_json?.astrology?.moon ?? null)}</span>
+                      {insights?.summary_json?.astrology?.moon ?? "–"}
+                    </p>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  className="summary-item"
+                  onClick={() =>
+                    openModal(
+                      "Ascendant",
+                      `${describeAscendantDeep(insights?.summary_json?.astrology?.ascendant ?? null)} It often colors your style and the immediate vibe you give off.`,
+                      insights?.summary_json?.astrology?.ascendant ?? undefined
+                    )
+                  }
+                >
+                  <span className="summary-icon">↥</span>
+                  <div>
+                    <p className="summary-label">Ascendant</p>
+                    <p className="summary-value">
+                      <span className="summary-sign">{signSymbolFor(insights?.summary_json?.astrology?.ascendant ?? null)}</span>
+                      {insights?.summary_json?.astrology?.ascendant ?? "–"}
+                    </p>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            <div className="summary-card">
+              <h3>Human Design</h3>
+              <div className="summary-items">
+                <button
+                  type="button"
+                  className="summary-item"
+                  onClick={() =>
+                    openModal(
+                      "Energy Type",
+                      (() => {
+                        const type = insights?.summary_json?.human_design?.type ?? "";
+                        const base =
+                          insights?.human_design_json?.type?.description ||
+                          "Energy type describes your overall life force and how you best interact with the world.";
+                        const extra = type ? humanDesignTypeDetail[type] ?? "" : "";
+                        const example = type ? humanDesignExamples[type] ?? "" : "";
+                        return `${base} ${extra} ${example} For you, this is your baseline way of operating and how others feel your energy.`.trim();
+                      })()
+                    )
+                  }
+                >
+                  <span className="summary-icon">⚡</span>
+                  <div>
+                    <p className="summary-label">Energy Type</p>
+                    <p className="summary-value">{insights?.summary_json?.human_design?.type ?? "–"}</p>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  className="summary-item"
+                  onClick={() =>
+                    openModal(
+                      "Strategy",
+                      (() => {
+                        const strategy =
+                          insights?.human_design_json?.type?.strategy ||
+                          insights?.summary_json?.human_design?.strategy ||
+                          "";
+                        const base =
+                          "Strategy is your practical path for decisions and less resistance.";
+                        const extra = strategy ? humanDesignStrategyDetail[strategy] ?? "" : "";
+                        return `${base} ${strategy ? `Strategy: ${strategy}.` : ""} ${extra} It’s the path that reduces friction and helps you align your actions.`.trim();
+                      })()
+                    )
+                  }
+                >
+                  <span className="summary-icon">↳</span>
+                  <div>
+                    <p className="summary-label">Strategy</p>
+                    <p className="summary-value">
+                      {insights?.summary_json?.human_design?.strategy ?? "–"}
+                    </p>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  className="summary-item"
+                  onClick={() =>
+                    openModal(
+                      "Authority",
+                      (() => {
+                        const authority = insights?.summary_json?.human_design?.authority ?? "";
+                        const base =
+                          insights?.human_design_json?.authority?.description ||
+                          "Authority shows where your most reliable inner compass lives.";
+                        const extra = authority ? humanDesignAuthorityDetail[authority] ?? "" : "";
+                        return `${base} ${authority ? `Authority: ${authority}.` : ""} ${extra} It’s your most trusted decision‑making center over time.`.trim();
+                      })()
+                    )
+                  }
+                >
+                  <span className="summary-icon">◎</span>
+                  <div>
+                    <p className="summary-label">Authority</p>
+                    <p className="summary-value">
+                      {insights?.summary_json?.human_design?.authority ?? "–"}
+                    </p>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            <div className="summary-card zodiac-card">
+              <h3>Chinese zodiac</h3>
+              <div className="summary-items">
+                <div className="zodiac-stack">
+                  <button
+                    type="button"
+                    className="summary-item zodiac-row-button"
+                    onClick={() =>
                       openModal(
-                        "Yin/Yang",
-                        `Yin/Yang describes the polarity of the animal.\n\nYin/Yang: ${zodiacMeta[insights?.summary_json?.chinese_zodiac ?? ""]!.yinYang}\nYin tends to be receptive and reflective; Yang tends to be expressive and outward.`
+                        "Year animal",
+                        `${
+                          zodiacMeaning[insights?.summary_json?.chinese_zodiac ?? ""] ||
+                          "Your year animal is based on your birth year and reflects archetypal traits in Chinese tradition."
+                        } It often shows up as both your natural temperament and how you move through community. When it’s strong, you’ll notice it as your instinctive style under pressure or in new situations.\n\n${
+                          zodiacMeta[insights?.summary_json?.chinese_zodiac ?? ""] ?
+                            `Animal: ${zodiacMeta[insights?.summary_json?.chinese_zodiac ?? ""]!.animalChar}\nEarthly Branch: ${zodiacMeta[insights?.summary_json?.chinese_zodiac ?? ""]!.earthlyBranch}\nTrine: ${zodiacMeta[insights?.summary_json?.chinese_zodiac ?? ""]!.trine} (a group of three animals that share a similar rhythm and element)` :
+                            ""
+                        }`,
+                        undefined,
+                        undefined,
+                        zodiacIcons[insights?.summary_json?.chinese_zodiac ?? ""] ?? "🐉"
                       )
                     }
                   >
-                      <span className="summary-icon zodiac-icon">☯︎</span>
-                      <div>
-                        <p className="summary-label">Yin/Yang</p>
-                        <p className="summary-value">{zodiacMeta[insights?.summary_json?.chinese_zodiac ?? ""]!.yinYang}</p>
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      className="summary-item zodiac-row-button"
-                      onClick={() =>
-                      openModal(
-                        "Element",
-                        `The fixed element adds a deeper tone to the animal.\n\nElement: ${zodiacMeta[insights?.summary_json?.chinese_zodiac ?? ""]!.element}\nThis element colors your strengths, challenges, and how you respond under pressure.`
-                      )
-                    }
-                  >
-                      <span className="summary-icon zodiac-icon element-icon">
-                        {elementIcons[zodiacMeta[insights?.summary_json?.chinese_zodiac ?? ""]!.element] ?? null}
-                      </span>
-                      <div>
-                        <p className="summary-label">Element</p>
-                        <p className="summary-value">{zodiacMeta[insights?.summary_json?.chinese_zodiac ?? ""]!.element}</p>
-                      </div>
-                    </button>
-                  </>
-                ) : null}
+                    <span className="summary-icon zodiac-icon">
+                      {zodiacIcons[insights?.summary_json?.chinese_zodiac ?? ""] ?? "🐉"}
+                    </span>
+                    <div>
+                      <p className="summary-label">Year animal</p>
+                      <p className="summary-value">{insights?.summary_json?.chinese_zodiac ?? "–"}</p>
+                    </div>
+                  </button>
+                  {zodiacMeta[insights?.summary_json?.chinese_zodiac ?? ""] ? (
+                    <>
+                      <button
+                        type="button"
+                        className="summary-item zodiac-row-button"
+                        onClick={() =>
+                        openModal(
+                          "Yin/Yang",
+                          `Yin/Yang describes the polarity of the animal.\n\nYin/Yang: ${zodiacMeta[insights?.summary_json?.chinese_zodiac ?? ""]!.yinYang}\nYin tends to be receptive and reflective; Yang tends to be expressive and outward. This polarity colors how you pace yourself, relate to others, and process experiences.`,
+                          undefined,
+                          undefined,
+                          "☯︎"
+                        )
+                      }
+                    >
+                        <span className="summary-icon zodiac-icon">☯︎</span>
+                        <div>
+                          <p className="summary-label">Yin/Yang</p>
+                          <p className="summary-value">{zodiacMeta[insights?.summary_json?.chinese_zodiac ?? ""]!.yinYang}</p>
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        className="summary-item zodiac-row-button"
+                        onClick={() =>
+                        openModal(
+                          "Element",
+                          `The fixed element adds a deeper tone to the animal.\n\nElement: ${zodiacMeta[insights?.summary_json?.chinese_zodiac ?? ""]!.element}\nThis element colors your strengths, challenges, and how you respond under pressure.`,
+                          undefined,
+                          undefined,
+                          elementIcons[zodiacMeta[insights?.summary_json?.chinese_zodiac ?? ""]!.element] ?? null
+                        )
+                      }
+                    >
+                        <span className="summary-icon zodiac-icon element-icon">
+                          {elementIcons[zodiacMeta[insights?.summary_json?.chinese_zodiac ?? ""]!.element] ?? null}
+                        </span>
+                        <div>
+                          <p className="summary-label">Element</p>
+                          <p className="summary-value">{zodiacMeta[insights?.summary_json?.chinese_zodiac ?? ""]!.element}</p>
+                        </div>
+                      </button>
+                    </>
+                  ) : null}
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
         <div className="insights-actions">
           {insightsError ? <span className="status bad">{insightsError}</span> : null}
@@ -1409,6 +2257,20 @@ export default function App() {
       {!profileMissing ? (
       <section className="profile-card astro-chart">
         <p className="eyebrow">Astrology</p>
+        <div className="summary-card deep-dive-astro">
+          <h3>Go Deeper</h3>
+          <p className="summary-detail">
+            Your chart is calculated from birth date, exact time, and location to place each planet in a sign and a house.
+            Think of it as a layered map: planets are the actors, signs are their style, and houses are the stages where
+            the story unfolds in real life.
+          </p>
+          <p className="summary-detail">
+            The Houses & Planets chart below shows where your energy concentrates. Tap a placement to see the deeper
+            meaning: the planet’s drive, the sign’s tone, and the house’s life area. Aspects are the conversations between
+            planets—easy angles feel natural, tense ones create friction that drives growth. Together, these layers reveal
+            your patterns, your strengths, and the kinds of situations that shape you most.
+          </p>
+        </div>
         <div className="chart-wrap">
           <div className="house-chart">
             <div className="house-chart-header">
@@ -1424,8 +2286,24 @@ export default function App() {
                     className="house-sign"
                     onClick={() =>
                       openModal(
-                        `House ${row.house}`,
-                        `${houseMeaning[row.house] ?? "This house describes a life area."} Sign: ${row.sign || "–"}. ${describeSignDeep(row.sign)}`
+                        row.sign ?? "Sign",
+                        (() => {
+                          const signText = describeSignDeep(row.sign);
+                          const list = [
+                            row.ascendant ? "Ascendant" : null,
+                            ...row.planets.map((p) => p.name),
+                          ].filter(Boolean);
+                          const planetText = list.length
+                            ? `In your chart, ${row.sign} hosts ${list.join(", ")}.`
+                            : `In your chart, ${row.sign} doesn’t host any planets.`;
+                          const houseText = houseNames[row.house]
+                            ? `This sign sits in the ${houseNames[row.house]}.`
+                            : "";
+                          return `${signText} ${planetText} ${houseText}`.trim();
+                        })(),
+                        houseNames[row.house],
+                        undefined,
+                        row.signSymbol
                       )
                     }
                   >
@@ -1441,8 +2319,17 @@ export default function App() {
                       onClick={() =>
                         openModal(
                           "Ascendant",
-                          describeAscendantDeep(row.sign),
-                          ascLon ? `${row.sign ?? "–"}, ${formatDegree(ascLon)} · 1st House` : undefined
+                          (() => {
+                            const base = describeAscendantDeep(row.sign);
+                            const houseText = `It anchors the 1st House — the area of ${houseDetail[1]}.`;
+                            const signText = row.sign
+                              ? `In ${row.sign}, it comes across as ${signTone[row.sign] ?? "a distinct personal style"}.`
+                              : "";
+                            return `${base} ${houseText} ${signText}`.trim();
+                          })(),
+                          ascLon ? `${row.sign ?? "–"}, ${formatDegree(ascLon)} · 1st House` : undefined,
+                          undefined,
+                          "↥"
                         )
                       }
                     >
@@ -1459,8 +2346,20 @@ export default function App() {
                         onClick={() =>
                           openModal(
                             p.name,
-                            describePlanetDeep(p.name, p.sign || row.sign, row.house),
-                            planetSubtitle(p.name)
+                            (() => {
+                              const planetText = planetMeaning[p.name] ?? "This planet describes a life theme.";
+                              const houseText = row.house
+                                ? `It lives in the ${houseNames[row.house]} — the area of ${houseDetail[row.house]}.`
+                                : "";
+                              const sign = p.sign || row.sign;
+                              const signText = sign
+                                ? `In ${sign}, it tends to ${signTone[sign] ?? "express in its own style"}.`
+                                : "";
+                              return `${planetText} ${houseText} ${signText}`.trim();
+                            })(),
+                            planetSubtitle(p.name),
+                            undefined,
+                            p.symbol
                           )
                         }
                       >
@@ -1478,9 +2377,28 @@ export default function App() {
                     className="house-num"
                     onClick={() =>
                       openModal(
-                        `House ${row.house}`,
-                        houseMeaning[row.house] ?? "This house describes a life area.",
-                        houseNames[row.house] ?? `house ${row.house}`
+                        houseNames[row.house] ?? `House ${row.house}`,
+                        (() => {
+                          const base = houseMeaning[row.house] ?? "This house describes a life area.";
+                          const detail = houseDetail[row.house] ? `It focuses on ${houseDetail[row.house]}` : "";
+                          const signText = row.sign
+                            ? `The sign on this house is ${row.sign}: ${describeSignDeep(row.sign)}`
+                            : "";
+                          const list = [
+                            row.ascendant ? "Ascendant" : null,
+                            ...row.planets.map((p) => p.name),
+                          ].filter(Boolean);
+                          const planetText = list.length
+                            ? `It hosts ${list.join(", ")}.`
+                            : "It currently holds no planets.";
+                          return `${base} ${detail} ${signText} ${planetText}`.trim();
+                        })(),
+                        houseNames[row.house] ?? `house ${row.house}`,
+                        undefined,
+                        <span className="modal-house-icon">
+                          {houseSvgIcon}
+                          <span className="modal-house-number">{row.house}</span>
+                        </span>
                       )
                     }
                   >
@@ -1538,13 +2456,22 @@ export default function App() {
                           <p>
                             {p.sign}, {deg}
                           </p>
-                      <p>House {p.house} · {houseNames[p.house] ?? `house ${p.house}`}</p>
-                    </div>
-                  </div>
-                  <p>{describePlanetDeep(p.name, p.sign, p.house)}</p>
-                </article>
-              );
-            });
+                          <div className="detail-meta">
+                            <span className="detail-chip">
+                              <span className="chip-icon">{signSymbolFor(p.sign ?? null)}</span>
+                              {p.sign ?? "–"}
+                            </span>
+                            <span className="detail-chip">
+                              <span className="chip-icon house-mini">{houseSvgIconSmall}</span>
+                              {houseNames[p.house] ?? `House ${p.house}`}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <p>{describePlanetDeep(p.name, p.sign, p.house)}</p>
+                    </article>
+                  );
+                });
             if (typeof ascLon === "number") {
               cards.unshift(
                 <article key="Ascendant" className="detail-card">
@@ -1555,7 +2482,16 @@ export default function App() {
                       <p>
                         {ascSign ?? "–"}, {formatDegree(ascLon)}
                       </p>
-                    <p>House 1 · 1st House</p>
+                      <div className="detail-meta">
+                        <span className="detail-chip">
+                          <span className="chip-icon">{signSymbolFor(ascSign ?? null)}</span>
+                          {ascSign ?? "–"}
+                        </span>
+                        <span className="detail-chip">
+                          <span className="chip-icon house-mini">{houseSvgIconSmall}</span>
+                          1st House
+                        </span>
+                      </div>
                     </div>
                   </div>
                   <p>{describeAscendantDeep(ascSign)}</p>
@@ -1568,7 +2504,327 @@ export default function App() {
         </div>
       </section>
       ) : null}
+
+      {!profileMissing ? (
+      <section className="profile-card profile-extras">
+        <p className="eyebrow">Deep Dive</p>
+        <div className="summary-stack">
+          <section className="hd-card" aria-labelledby="hd-title">
+            <h2 id="hd-title">Deep Dive - Human Design</h2>
+
+            <div className="hd-grid">
+              <div className="hd-item">
+                <div className="hd-icon">⚡</div>
+                <div className="hd-meta">
+                  <div className="hd-label">Energy Type</div>
+                  <div className="hd-value">{hdType}</div>
+                </div>
+              </div>
+
+              <div className="hd-item">
+                <div className="hd-icon">↳</div>
+                <div className="hd-meta">
+                  <div className="hd-label">Strategy</div>
+                  <div className="hd-value">{hdStrategy}</div>
+                </div>
+              </div>
+
+              <div className="hd-item">
+                <div className="hd-icon">◎</div>
+                <div className="hd-meta">
+                  <div className="hd-label">Authority</div>
+                  <div className="hd-value">{hdAuthority}</div>
+                </div>
+              </div>
+
+              <div className="hd-item">
+                <div className="hd-icon">◈</div>
+                <div className="hd-meta">
+                  <div className="hd-label">Profile</div>
+                  <div className="hd-value">{hdProfileLabel}</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="hd-body">
+              <p>{buildHumanDesignNarrative()}</p>
+            </div>
+
+            <div className="hd-actions">
+              <button
+                className="hd-btn hd-btn-small"
+                id="aboutHdBtn"
+                type="button"
+                aria-expanded={isHdOpen}
+                aria-controls="hd-deeper"
+                onClick={() => setIsHdOpen((prev) => !prev)}
+              >
+                About Human Design
+                <span className={`hd-btn-caret${isHdOpen ? " open" : ""}`} aria-hidden="true">
+                  ▾
+                </span>
+              </button>
+              <button
+                className="hd-btn hd-btn-primary"
+                type="button"
+                onClick={() => setIsHdChartOpen(true)}
+              >
+                Create Chart
+              </button>
+            </div>
+
+            <div className="hd-deeper" id="hd-deeper" hidden={!isHdOpen}>
+              <h3>{hdDeepDiveTitle}</h3>
+
+              <div className="hd-chartwrap">
+                <div className="hd-charthead">
+                  <div>
+                    <div className="hd-charttitle">Bodygraph</div>
+                    <div className="hd-chartsub">
+                      Definierade centers och kanaler markerade från födelsedatan.
+                    </div>
+                  </div>
+                </div>
+                <div className="hd-bodygraph-wrap" aria-label="Human Design bodygraph">
+                  {renderHdBodygraph()}
+                </div>
+              </div>
+
+              {isEmotionalAuthority ? (
+                <div className="hd-chartwrap" role="group" aria-label="Emotional Authority Wave chart">
+                  <div className="hd-charthead">
+                    <div>
+                      <div className="hd-charttitle">Emotional Authority Wave</div>
+                      <div className="hd-chartsub">
+                        Klarhet tenderar att komma efter toppen/dalen — inte i första impulsen.
+                      </div>
+                    </div>
+                    <button className="hd-mini" type="button" onClick={drawHdWave}>
+                      Redraw
+                    </button>
+                  </div>
+
+                  <canvas
+                    ref={hdCanvasRef}
+                    className="hd-canvas"
+                    height={220}
+                    aria-label="Wave chart"
+                  />
+
+                  <div className="hd-chartlegend" aria-hidden="true">
+                    <span className="pill">High</span>
+                    <span className="pill">Neutral / Clarity zone</span>
+                    <span className="pill">Low</span>
+                  </div>
+
+                  <p className="hd-note">
+                    Tips: använd detta som “decision hygiene”. Vänta minst en natt (ibland 2–3 dygn)
+                    och känn om ditt ja/nej är stabilt över flera lägen.
+                  </p>
+                </div>
+              ) : (
+                <div className="hd-chartwrap" role="group" aria-label="Authority focus">
+                  <div className="hd-charthead">
+                    <div>
+                      <div className="hd-charttitle">
+                        {hdAuthority !== "–" ? `${hdAuthority} focus` : "Authority focus"}
+                      </div>
+                      <div className="hd-chartsub">
+                        {authorityDetail ||
+                          "Authority shows where your most reliable inner compass lives."}
+                      </div>
+                    </div>
+                  </div>
+                  <p className="hd-note">
+                    Tips: ge beslut tid och låt kroppen bekräfta över flera lägen.
+                  </p>
+                </div>
+              )}
+
+              <div className="hd-section">
+                <h4>{hdType !== "–" ? `${hdType} (kort men nördigt)` : "Energy Type (kort men nördigt)"}</h4>
+                <ul>
+                  <li>
+                    <strong>Signature:</strong> {typeSignature || "—"}{" "}
+                    <strong>Not-self:</strong> {typeNotSelf || "—"}.
+                  </li>
+                  <li>
+                    <strong>Strategi i praktiken:</strong>{" "}
+                    {strategyDetail || "Strategi är din praktiska väg till mindre friktion."}
+                  </li>
+                </ul>
+              </div>
+
+              <div className="hd-section">
+                <h4>{hdProfile !== "–" ? `Profile ${hdProfileLabel}` : "Profile"}</h4>
+                <ul>
+                  <li>
+                    <strong>Profiltext:</strong>{" "}
+                    {profileDetail || "Profile describes how you learn, relate, and mature over time."}
+                  </li>
+                  <li>{profileExample || "Exempel: Din profil visar hur relationer och erfarenheter formar din roll."}</li>
+                </ul>
+              </div>
+
+              <div className="hd-section">
+                <h4>{hdDefinition !== "–" ? `${hdDefinition} (nördnotis)` : "Definition (nördnotis)"}</h4>
+                <ul>
+                  {isSplitDefinition ? (
+                    <>
+                      <li>
+                        Två “öar” i din definition som gärna kopplas ihop via rätt personer/miljöer
+                        (bridging).
+                      </li>
+                      <li>
+                        När den bryggas: “aha, nu sitter allt” – ofta märkbart i samarbete.
+                      </li>
+                    </>
+                  ) : (
+                    <>
+                      <li>
+                        {hdDefinition !== "–"
+                          ? `Din definition är ${hdDefinition}. Den beskriver hur dina center hänger ihop och hur du processar information.`
+                          : "Din definition beskriver hur dina center hänger ihop och hur du processar information."}
+                      </li>
+                      <li>
+                        Rätt miljö och samarbete kan göra att allt faller på plats snabbare.
+                      </li>
+                    </>
+                  )}
+                </ul>
+              </div>
+            </div>
+          </section>
+
+          <div className="summary-card zodiac-card">
+            <h3>Deep Dive - Chinese Zodiac</h3>
+            <div className="summary-items">
+              <div className="zodiac-stack">
+                <button
+                  type="button"
+                  className="summary-item zodiac-row-button"
+                  onClick={() =>
+                    openModal(
+                      "Year animal",
+                      `${
+                        zodiacMeaning[insights?.summary_json?.chinese_zodiac ?? ""] ||
+                        "Your year animal is based on your birth year and reflects archetypal traits in Chinese tradition."
+                      } It often shows up as both your natural temperament and how you move through community. When it’s strong, you’ll notice it as your instinctive style under pressure or in new situations.\n\n${
+                        zodiacMeta[insights?.summary_json?.chinese_zodiac ?? ""] ?
+                          `Animal: ${zodiacMeta[insights?.summary_json?.chinese_zodiac ?? ""]!.animalChar}\nEarthly Branch: ${zodiacMeta[insights?.summary_json?.chinese_zodiac ?? ""]!.earthlyBranch}\nTrine: ${zodiacMeta[insights?.summary_json?.chinese_zodiac ?? ""]!.trine} (a group of three animals that share a similar rhythm and element)` :
+                          ""
+                      }`,
+                      undefined,
+                      undefined,
+                      zodiacIcons[insights?.summary_json?.chinese_zodiac ?? ""] ?? "🐉"
+                    )
+                  }
+                >
+                  <span className="summary-icon zodiac-icon">
+                    {zodiacIcons[insights?.summary_json?.chinese_zodiac ?? ""] ?? "🐉"}
+                  </span>
+                  <div>
+                    <p className="summary-label">Year animal</p>
+                    <p className="summary-value">{insights?.summary_json?.chinese_zodiac ?? "–"}</p>
+                  </div>
+                </button>
+                {zodiacMeta[insights?.summary_json?.chinese_zodiac ?? ""] ? (
+                  <>
+                    <button
+                      type="button"
+                      className="summary-item zodiac-row-button"
+                      onClick={() =>
+                      openModal(
+                        "Yin/Yang",
+                        `Yin/Yang describes the polarity of the animal.\n\nYin/Yang: ${zodiacMeta[insights?.summary_json?.chinese_zodiac ?? ""]!.yinYang}\nYin tends to be receptive and reflective; Yang tends to be expressive and outward. This polarity colors how you pace yourself, relate to others, and process experiences.`,
+                        undefined,
+                        undefined,
+                        "☯︎"
+                      )
+                    }
+                  >
+                      <span className="summary-icon zodiac-icon">☯︎</span>
+                      <div>
+                        <p className="summary-label">Yin/Yang</p>
+                        <p className="summary-value">{zodiacMeta[insights?.summary_json?.chinese_zodiac ?? ""]!.yinYang}</p>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      className="summary-item zodiac-row-button"
+                      onClick={() =>
+                      openModal(
+                        "Element",
+                        `The fixed element adds a deeper tone to the animal.\n\nElement: ${zodiacMeta[insights?.summary_json?.chinese_zodiac ?? ""]!.element}\nThis element colors your strengths, challenges, and how you respond under pressure.`,
+                        undefined,
+                        undefined,
+                        elementIcons[zodiacMeta[insights?.summary_json?.chinese_zodiac ?? ""]!.element] ?? null
+                      )
+                    }
+                  >
+                      <span className="summary-icon zodiac-icon element-icon">
+                        {elementIcons[zodiacMeta[insights?.summary_json?.chinese_zodiac ?? ""]!.element] ?? null}
+                      </span>
+                      <div>
+                        <p className="summary-label">Element</p>
+                        <p className="summary-value">{zodiacMeta[insights?.summary_json?.chinese_zodiac ?? ""]!.element}</p>
+                      </div>
+                    </button>
+                  </>
+                ) : null}
+              </div>
+            </div>
+            <p className="summary-detail">
+              {insights?.summary_json?.chinese_zodiac
+                ? `${insights?.summary_json?.chinese_zodiac} is the year animal tied to your birth year. It offers a broad lens on temperament, social rhythm, and how you move through change.`
+                : "Your year animal offers a broad lens on temperament and how you move through change."}{" "}
+              {zodiacMeta[insights?.summary_json?.chinese_zodiac ?? ""]?.element
+                ? `The ${zodiacMeta[insights?.summary_json?.chinese_zodiac ?? ""]!.element.toLowerCase()} element adds a steady undertone that colors your strengths and challenges.`
+                : ""}{" "}
+              {zodiacMeta[insights?.summary_json?.chinese_zodiac ?? ""]?.yinYang
+                ? `The ${zodiacMeta[insights?.summary_json?.chinese_zodiac ?? ""]!.yinYang.toLowerCase()} polarity hints at whether your energy tends to be more receptive or expressive in daily life.`
+                : ""}
+            </p>
+          </div>
+        </div>
+      </section>
+          ) : null}
         </>
+      ) : null}
+
+      {isHumanDesignPage ? (
+        <section className="profile-card profile-extras">
+          <div className="profile-header">
+            <div>
+              <p className="eyebrow">Human Design</p>
+              <h2>Human Design Report</h2>
+              <p className="lead">
+                En tydlig sammanställning av din chart, med bodygraph, gates, channels och center.
+              </p>
+            </div>
+          </div>
+
+          {hdPageLoading ? <p>Laddar rapport...</p> : null}
+          {hdPageError ? <p className="status bad">{hdPageError}</p> : null}
+
+          {!hdPageLoading && !hdPageError ? (
+            <>
+              <iframe
+                className="hd-report-frame"
+                title="Human Design Report"
+                src={hdReportUrl}
+              />
+              <div className="modal-actions hd-modal-actions">
+                <a className="btn-primary" href={hdReportPrintUrl} target="_blank" rel="noreferrer">
+                  Ladda ner rapport (PDF)
+                </a>
+                <a className="btn-ghost" href={hdEmailLink}>
+                  Skicka till min email
+                </a>
+              </div>
+            </>
+          ) : null}
+        </section>
       ) : null}
 
       {isSettingsPage ? (
@@ -1576,7 +2832,7 @@ export default function App() {
           <div className="profile-header">
             <div>
               <p className="eyebrow">Settings</p>
-              <h2>Profile</h2>
+              <h2>Settings</h2>
             </div>
             <div className="profile-badge">
               <span>{profileMissing ? "Missing" : "Ready"}</span>
@@ -1799,7 +3055,7 @@ export default function App() {
         </section>
       ) : null}
 
-      {!isProfilePage && !isSettingsPage ? (
+      {isLobbyPage ? (
       <>
         <header className="hero">
         <p className="eyebrow">CHKN</p>
@@ -1927,7 +3183,7 @@ export default function App() {
         )}
       </section>
       <section className="debug">
-        <h3>Debug: Authentik</h3>
+        <h3>Debug: sputnet.space</h3>
         {authDebug ? (
           <div>
             <p>

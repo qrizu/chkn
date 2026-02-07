@@ -235,7 +235,7 @@ const server = http.createServer((req, res) => {
     }
     Promise.all([
       pool.query(
-        `SELECT user_id, birth_date, birth_time, unknown_time, birth_place, birth_lat, birth_lng, tz_name, tz_offset_minutes
+        `SELECT user_id, birth_date::text as birth_date, birth_time::text as birth_time, unknown_time, birth_place, birth_lat, birth_lng, tz_name, tz_offset_minutes
          FROM user_profiles
          WHERE user_id = $1`,
         [userId]
@@ -410,7 +410,7 @@ const server = http.createServer((req, res) => {
     }
     pool
       .query(
-        `SELECT birth_date, birth_time, unknown_time, birth_place, birth_lat, birth_lng, tz_name, tz_offset_minutes
+        `SELECT birth_date::text as birth_date, birth_time::text as birth_time, unknown_time, birth_place, birth_lat, birth_lng, tz_name, tz_offset_minutes
          FROM user_profiles
          WHERE user_id = $1`,
         [userId]
@@ -478,6 +478,72 @@ const server = http.createServer((req, res) => {
       });
     return;
   }
+  if (req.url?.startsWith("/api/profile/insights/") && req.method === "GET") {
+    const authUserId = getUserIdFromReq(req);
+    if (!authUserId) {
+      res.writeHead(401, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: false, error: "unauthorized" }));
+      return;
+    }
+    const parts = req.url.split("/").filter(Boolean);
+    const requestedId = parts[parts.length - 1];
+    if (!requestedId) {
+      res.writeHead(400, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: false, error: "missing_user_id" }));
+      return;
+    }
+    pool
+      .query(
+        `SELECT insight_id, summary_json, astrology_json, human_design_json, created_at
+         FROM profile_insights
+         WHERE user_id = $1
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [requestedId]
+      )
+      .then((result) => {
+        const row = result.rowCount ? result.rows[0] : null;
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true, insights: row }));
+      })
+      .catch((err) => {
+        res.writeHead(500, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: "db_error", details: String(err) }));
+      });
+    return;
+  }
+  if (req.url?.startsWith("/api/profile/") && req.method === "GET") {
+    const authUserId = getUserIdFromReq(req);
+    if (!authUserId) {
+      res.writeHead(401, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: false, error: "unauthorized" }));
+      return;
+    }
+    const parts = req.url.split("/").filter(Boolean);
+    const requestedId = parts[parts.length - 1];
+    if (!requestedId || requestedId === "profile") {
+      res.writeHead(400, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: false, error: "missing_user_id" }));
+      return;
+    }
+    pool
+      .query(
+        `SELECT user_id, birth_date::text as birth_date, birth_time::text as birth_time, unknown_time, birth_place, birth_lat, birth_lng, tz_name, tz_offset_minutes
+         FROM user_profiles
+         WHERE user_id = $1`,
+        [requestedId]
+      )
+      .then((result) => {
+        const row = result.rowCount ? result.rows[0] : null;
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true, profile: row }));
+      })
+      .catch((err) => {
+        res.writeHead(500, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: "db_error", details: String(err) }));
+      });
+    return;
+  }
   if (req.url === "/api/profile/insights/calc" && req.method === "POST") {
     const userId = getUserIdFromReq(req);
     if (!userId) {
@@ -487,7 +553,7 @@ const server = http.createServer((req, res) => {
     }
     pool
       .query(
-        `SELECT birth_date, birth_time, unknown_time, birth_place, birth_lat, birth_lng, tz_name, tz_offset_minutes
+        `SELECT birth_date::text as birth_date, birth_time::text as birth_time, unknown_time, birth_place, birth_lat, birth_lng, tz_name, tz_offset_minutes
          FROM user_profiles
          WHERE user_id = $1`,
         [userId]

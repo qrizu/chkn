@@ -66,9 +66,9 @@ const signFromLon = (lon: number | null) => {
 
 const toDateString = (birthDate: string | Date) => {
   if (birthDate instanceof Date) {
-    const y = birthDate.getUTCFullYear();
-    const m = String(birthDate.getUTCMonth() + 1).padStart(2, "0");
-    const d = String(birthDate.getUTCDate()).padStart(2, "0");
+    const y = birthDate.getFullYear();
+    const m = String(birthDate.getMonth() + 1).padStart(2, "0");
+    const d = String(birthDate.getDate()).padStart(2, "0");
     return `${y}-${m}-${d}`;
   }
   return String(birthDate);
