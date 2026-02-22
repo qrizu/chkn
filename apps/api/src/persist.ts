@@ -15,6 +15,7 @@ export type RuntimeLike = {
   yatzySubmissions: Map<string, number>;
   yatzyMatchId: string | null;
   hostUserId: string;
+  blackjack: any;
   seq: number;
 };
 
@@ -29,6 +30,9 @@ export const snapshotOnTypes = new Set([
   "YATZY_IMPORTED",
   "YATZY_MATCH_SET",
   "YATZY_MATCH_CREATED",
+  "BJ_ROUND_STARTED",
+  "BJ_HAND_STATE",
+  "BJ_ROUND_COMPLETED",
 ]);
 
 export const buildPersistedState = (runtime: RuntimeLike): PersistedMatchState => {
@@ -43,6 +47,7 @@ export const buildPersistedState = (runtime: RuntimeLike): PersistedMatchState =
     yatzySubmissions: Array.from(runtime.yatzySubmissions.entries()),
     yatzyMatchId: runtime.yatzyMatchId,
     hostUserId: runtime.hostUserId,
+    blackjack: runtime.blackjack ?? null,
     seq: runtime.seq,
   };
 };

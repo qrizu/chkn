@@ -9,7 +9,7 @@ export type Stage =
   | "HOLDEM"
   | "RESULTS";
 
-export type MatchMode = "CHICKEN_RUN" | "FIVE_KAMP";
+export type MatchMode = "CHICKEN_RUN" | "FIVE_KAMP" | "BLACKJACK_ONLY";
 
 export type MatchStatus = "CREATED" | "RUNNING" | "COMPLETED" | "CANCELLED";
 
@@ -56,6 +56,9 @@ export type ServerEvent =
   | { type: "YATZY_MATCH_CREATED"; matchId: string; yatzyMatchId: string }
   | { type: "STAGE_STARTED"; matchId: string; stage: Stage; ts: number }
   | { type: "STAGE_COMPLETED"; matchId: string; stage: Stage; ts: number }
+  | { type: "BJ_ROUND_STARTED"; matchId: string; round: number; ts: number }
+  | { type: "BJ_HAND_STATE"; matchId: string; round: number; spot: number; userId: string; state: any }
+  | { type: "BJ_ROUND_COMPLETED"; matchId: string; round: number; ts: number }
   | { type: "LEDGER_ENTRY_APPLIED"; entry: LedgerEntry }
   | { type: "STACK_UPDATED"; matchId: string; userId: string; stack: number }
   | { type: "MATCH_COMPLETED"; matchId: string };
@@ -69,8 +72,8 @@ export type ClientEvent =
   | { type: "YATZY_IMPORT"; matchId: string; yatzyMatchId: string }
   | { type: "YATZY_MATCH_SET"; matchId: string; yatzyMatchId: string }
   | { type: "YATZY_CREATE"; matchId: string }
-  | { type: "BJ_BET_PLACED"; matchId: string; round: number; spots: number[]; bet: number }
-  | { type: "BJ_HAND_ACTION"; matchId: string; round: number; spot: number; action: "HIT" | "STAND" | "DOUBLE" | "SPLIT" }
+  | { type: "BJ_BET_PLACED"; matchId: string; round: number; spots: number[]; bet: number; sideBets?: Array<{ spot: number; choice: "UNDER" | "OVER" }> }
+  | { type: "BJ_HAND_ACTION"; matchId: string; round: number; spot: number; action: "HIT" | "STAND" | "DOUBLE" | "SPLIT"; handIndex?: number }
   | { type: "ROULETTE_BET_PLACED"; matchId: string; color: "RED" | "BLACK"; bet: number }
   | { type: "TRIVIA_CATEGORY_PICKED"; matchId: string; categoryId: string }
   | { type: "TRIVIA_ANSWER_SUBMITTED"; matchId: string; questionId: string; answerId: string }

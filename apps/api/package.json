@@ -13,9 +13,10 @@
     "natalengine": "^1.0.8",
     "pg": "^8.11.5",
     "redis": "^4.7.0",
+    "sharp": "^0.34.5",
     "socket.io": "^4.7.5",
-    "timezone-support": "^3.0.0",
     "swisseph": "*",
+    "timezone-support": "^3.0.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {

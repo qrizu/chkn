@@ -12,7 +12,7 @@ export const StageSchema = z.enum([
   "RESULTS",
 ]);
 
-export const MatchModeSchema = z.enum(["CHICKEN_RUN", "FIVE_KAMP"]);
+export const MatchModeSchema = z.enum(["CHICKEN_RUN", "FIVE_KAMP", "BLACKJACK_ONLY"]);
 export const MatchStatusSchema = z.enum(["CREATED", "RUNNING", "COMPLETED", "CANCELLED"]);
 
 export const MatchSchema = z.object({
@@ -58,6 +58,9 @@ export const ServerEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("YATZY_MATCH_CREATED"), matchId: z.string(), yatzyMatchId: z.string() }),
   z.object({ type: z.literal("STAGE_STARTED"), matchId: z.string(), stage: StageSchema, ts: z.number() }),
   z.object({ type: z.literal("STAGE_COMPLETED"), matchId: z.string(), stage: StageSchema, ts: z.number() }),
+  z.object({ type: z.literal("BJ_ROUND_STARTED"), matchId: z.string(), round: z.number().int(), ts: z.number() }),
+  z.object({ type: z.literal("BJ_HAND_STATE"), matchId: z.string(), round: z.number().int(), spot: z.number().int(), userId: z.string(), state: z.unknown() }),
+  z.object({ type: z.literal("BJ_ROUND_COMPLETED"), matchId: z.string(), round: z.number().int(), ts: z.number() }),
   z.object({ type: z.literal("LEDGER_ENTRY_APPLIED"), entry: LedgerEntrySchema }),
   z.object({ type: z.literal("STACK_UPDATED"), matchId: z.string(), userId: z.string(), stack: z.number().int() }),
   z.object({ type: z.literal("MATCH_COMPLETED"), matchId: z.string() }),
@@ -75,16 +78,18 @@ export const ClientEventSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("BJ_BET_PLACED"),
     matchId: z.string(),
-    round: z.number().int().min(1).max(5),
+    round: z.number().int().min(1).max(10),
     spots: z.array(z.number().int().min(1).max(7)).max(7),
     bet: z.number().int().min(10).max(100),
+    sideBets: z.array(z.object({ spot: z.number().int().min(1).max(7), choice: z.enum(["UNDER", "OVER"]) })).max(7).optional(),
   }),
   z.object({
     type: z.literal("BJ_HAND_ACTION"),
     matchId: z.string(),
-    round: z.number().int().min(1).max(5),
+    round: z.number().int().min(1).max(10),
     spot: z.number().int().min(1).max(7),
     action: z.enum(["HIT", "STAND", "DOUBLE", "SPLIT"]),
+    handIndex: z.number().int().min(0).max(13).optional(),
   }),
   z.object({
     type: z.literal("ROULETTE_BET_PLACED"),

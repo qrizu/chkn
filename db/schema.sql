@@ -21,7 +21,7 @@ BEGIN
   ) THEN
     ALTER TABLE matches
       ADD CONSTRAINT matches_mode_chk
-      CHECK (mode IN ('CHICKEN_RUN','FIVE_KAMP'));
+      CHECK (mode IN ('CHICKEN_RUN','FIVE_KAMP','BLACKJACK_ONLY'));
   END IF;
 
   IF NOT EXISTS (
@@ -135,6 +135,25 @@ BEGIN
   END IF;
 END $$;
 
+CREATE TABLE IF NOT EXISTS user_avatars (
+  user_id          TEXT PRIMARY KEY,
+  avatar_mime_type TEXT NOT NULL,
+  avatar_data      BYTEA NOT NULL,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'trg_user_avatars_updated_at'
+  ) THEN
+    CREATE TRIGGER trg_user_avatars_updated_at
+    BEFORE UPDATE ON user_avatars
+    FOR EACH ROW EXECUTE FUNCTION chkn_set_updated_at();
+  END IF;
+END $$;
+
 CREATE TABLE IF NOT EXISTS birth_charts (
   chart_id    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id     TEXT NOT NULL REFERENCES user_profiles(user_id) ON DELETE CASCADE,
@@ -158,11 +177,54 @@ CREATE TABLE IF NOT EXISTS profile_insights (
 CREATE INDEX IF NOT EXISTS idx_profile_insights_user_id
   ON profile_insights(user_id);
 
+CREATE TABLE IF NOT EXISTS user_tarot_daily (
+  user_id          TEXT NOT NULL REFERENCES user_profiles(user_id) ON DELETE CASCADE,
+  draw_date        DATE NOT NULL,
+  card_number      INT NOT NULL,
+  card_name        TEXT NOT NULL,
+  orientation      TEXT NOT NULL,
+  image_url        TEXT NOT NULL,
+  summary          TEXT NOT NULL,
+  upright_meaning  TEXT NOT NULL,
+  reversed_meaning TEXT NOT NULL,
+  more_info_url    TEXT NOT NULL,
+  drawn_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at       TIMESTAMPTZ NOT NULL,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, draw_date)
+);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'user_tarot_daily_orientation_chk'
+  ) THEN
+    ALTER TABLE user_tarot_daily
+      ADD CONSTRAINT user_tarot_daily_orientation_chk
+      CHECK (orientation IN ('upright', 'reversed'));
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'trg_user_tarot_daily_updated_at'
+  ) THEN
+    CREATE TRIGGER trg_user_tarot_daily_updated_at
+    BEFORE UPDATE ON user_tarot_daily
+    FOR EACH ROW EXECUTE FUNCTION chkn_set_updated_at();
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_user_tarot_daily_user
+  ON user_tarot_daily(user_id, draw_date DESC);
+
 RESET search_path;
 
 -- Permissions
--- prod DB: ytzy (role: yatzy_user)
--- dev  DB: ytzy_dev (role: yatzy_devusr)
+-- prod DB: sputnet_app (role: yatzy_user)
+-- dev  DB: sputnet_app_dev (role: yatzy_devusr)
 GRANT USAGE ON SCHEMA chkn TO yatzy_user, yatzy_devusr;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA chkn TO yatzy_user, yatzy_devusr;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA chkn TO yatzy_user, yatzy_devusr;

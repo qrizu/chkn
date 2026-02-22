@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Human Design Report (Standalone)</title>
+  <title id="doc-title">Human Design Report (Standalone)</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
@@ -46,6 +46,10 @@
       grid-template-columns: 270px 1fr;
       gap: 24px;
       padding: 20px;
+    }
+
+    .page > .main:only-child {
+      grid-column: 1 / -1;
     }
 
     .sidebar {
@@ -455,6 +459,14 @@
         grid-template-columns: 1fr;
       }
 
+      .main {
+        order: 1;
+      }
+
+      .sidebar {
+        order: 2;
+      }
+
       .chart-layout {
         grid-template-columns: 1fr;
       }
@@ -548,60 +560,60 @@
       <div class="sidebar-list">
         <div class="sidebar-meta report-for-box">
           <div class="sidebar-meta-header">
-            <span class="meta-title">Report for:</span>
+            <span class="meta-title" id="meta-title-report-for">Report for:</span>
             <span class="meta-value" id="sidebar-username">—</span>
           </div>
           <div class="meta-row">
-            <span class="meta-label">Date of birth</span>
+            <span class="meta-label" id="meta-label-birthdate">Date of birth</span>
             <span class="meta-value" id="sidebar-birthdate">—</span>
           </div>
           <div class="meta-row">
-            <span class="meta-label">Time of birth</span>
+            <span class="meta-label" id="meta-label-birthtime">Time of birth</span>
             <span class="meta-value" id="sidebar-birthtime">—</span>
           </div>
           <div class="meta-row">
-            <span class="meta-label">UTC offset</span>
+            <span class="meta-label" id="meta-label-offset">UTC offset</span>
             <span class="meta-value" id="sidebar-offset">—</span>
           </div>
           <div class="meta-row">
-            <span class="meta-label">City of birth</span>
+            <span class="meta-label" id="meta-label-city">City of birth</span>
             <span class="meta-value" id="sidebar-city">—</span>
           </div>
           <div class="meta-row">
-            <span class="meta-label">Coordinates</span>
+            <span class="meta-label" id="meta-label-coords">Coordinates</span>
             <span class="meta-value" id="sidebar-coords">—</span>
           </div>
           <div class="meta-row">
-            <span class="meta-label">Report generated</span>
+            <span class="meta-label" id="meta-label-generated">Report generated</span>
             <span class="meta-value" id="sidebar-generated">—</span>
           </div>
         </div>
         <div class="sidebar-item">
-          <label>Type</label>
+          <label id="sidebar-label-type">Type</label>
           <div id="sidebar-type">—</div>
         </div>
         <div class="sidebar-item">
-          <label>Profile</label>
+          <label id="sidebar-label-profile">Profile</label>
           <div id="sidebar-profile">—</div>
         </div>
         <div class="sidebar-item">
-          <label>Definition</label>
+          <label id="sidebar-label-definition">Definition</label>
           <div id="sidebar-definition">—</div>
         </div>
         <div class="sidebar-item">
-          <label>Inner Authority</label>
+          <label id="sidebar-label-authority">Inner Authority</label>
           <div id="sidebar-authority">—</div>
         </div>
         <div class="sidebar-item">
-          <label>Strategy</label>
+          <label id="sidebar-label-strategy">Strategy</label>
           <div id="sidebar-strategy">—</div>
         </div>
         <div class="sidebar-item">
-          <label>Not-Self Theme</label>
+          <label id="sidebar-label-notself">Not-Self Theme</label>
           <div id="sidebar-notself">—</div>
         </div>
         <div class="sidebar-item">
-          <label>Incarnation Cross</label>
+          <label id="sidebar-label-cross">Incarnation Cross</label>
           <div id="sidebar-cross">—</div>
         </div>
       </div>
@@ -611,29 +623,29 @@
     <main class="main">
       <div class="main-header">
         <div class="title-stack">
-          <h2>Human Design Chart</h2>
-          <div class="brand-line">Calculated by Sputnik & Veloklang</div>
+          <h2 id="main-title-1">Human Design Chart</h2>
+          <div class="brand-line" id="main-brand-1">Calculated by Sputnet World</div>
         </div>
         <div class="actions">
-          <div class="pill">Share</div>
-          <div class="pill">Download</div>
-          <div class="pill">Print</div>
+          <div class="pill" id="action-share">Share</div>
+          <div class="pill" id="action-download">Download</div>
+          <div class="pill" id="action-print">Print</div>
         </div>
       </div>
       <div class="table-layout">
         <div class="column-card design">
-          <header>Design</header>
+          <header id="design-header">Design</header>
           <div id="design-list" class="column-list"></div>
         </div>
 
         <div class="column-card personality">
-          <header>Personality</header>
+          <header id="personality-header">Personality</header>
           <div id="personality-list" class="column-list"></div>
         </div>
       </div>
       <div class="report-footer">
         <img src="/logo-sputnet.png" alt="Sputnet logo">
-        <span>generated by sputnet.space</span>
+        <span id="footer-generated-by">generated by sputnet.world</span>
       </div>
     </main>
   </div>
@@ -642,8 +654,8 @@
     <main class="main">
       <div class="main-header">
         <div class="title-stack">
-          <h2>Human Design Chart</h2>
-          <div class="brand-line">as calculated by Sputnik</div>
+          <h2 id="main-title-2">Human Design Chart</h2>
+          <div class="brand-line" id="main-brand-2">as calculated by Sputnet World</div>
         </div>
       </div>
 
@@ -660,44 +672,44 @@
     <main class="main">
       <div class="main-header">
         <div class="title-stack">
-          <h2>Human Design Narrative</h2>
-          <div class="brand-line">as calculated by Sputnik</div>
+          <h2 id="main-title-3">Human Design Narrative</h2>
+          <div class="brand-line" id="main-brand-3">as calculated by Sputnet World</div>
         </div>
       </div>
 
       <section class="report-section">
-        <h3>Essence</h3>
+        <h3 id="section-essence">Essence</h3>
         <p id="report-essence">—</p>
       </section>
 
       <section class="report-section report-grid">
         <div class="report-card">
-          <h4>Type & Strategy</h4>
+          <h4 id="card-title-type-strategy">Type & Strategy</h4>
           <p id="report-type-strategy">—</p>
         </div>
         <div class="report-card">
-          <h4>Authority</h4>
+          <h4 id="card-title-authority">Authority</h4>
           <p id="report-authority">—</p>
         </div>
         <div class="report-card">
-          <h4>Profile</h4>
+          <h4 id="card-title-profile">Profile</h4>
           <p id="report-profile">—</p>
         </div>
         <div class="report-card">
-          <h4>Incarnation Cross</h4>
+          <h4 id="card-title-cross">Incarnation Cross</h4>
           <p id="report-cross">—</p>
         </div>
       </section>
 
       <section class="report-section">
-        <h3>Defined & Undefined Centers</h3>
+        <h3 id="section-centers">Defined & Undefined Centers</h3>
         <div class="report-grid">
           <div class="report-card">
-            <h4>Defined</h4>
+            <h4 id="card-title-defined">Defined</h4>
             <ul class="report-list" id="report-centers-defined"></ul>
           </div>
           <div class="report-card">
-            <h4>Undefined</h4>
+            <h4 id="card-title-undefined">Undefined</h4>
             <ul class="report-list" id="report-centers-undefined"></ul>
           </div>
         </div>
@@ -711,47 +723,47 @@
     <main class="main">
       <div class="main-header">
         <div class="title-stack">
-          <h2>Channels & Gates</h2>
-          <div class="brand-line">as calculated by Sputnik</div>
+          <h2 id="main-title-4">Channels & Gates</h2>
+          <div class="brand-line" id="main-brand-4">as calculated by Sputnet World</div>
         </div>
       </div>
 
       <section class="report-section">
-        <h3>Defined Channels</h3>
+        <h3 id="section-channels">Defined Channels</h3>
         <ul class="report-list" id="report-channels"></ul>
       </section>
 
       <section class="report-section">
-        <h3>Gates</h3>
+        <h3 id="section-gates">Gates</h3>
         <div class="report-grid">
           <div class="report-card">
-            <h4>Personality</h4>
+            <h4 id="card-title-gates-personality">Personality</h4>
             <ul class="report-list" id="report-gates-personality"></ul>
           </div>
           <div class="report-card">
-            <h4>Design</h4>
+            <h4 id="card-title-gates-design">Design</h4>
             <ul class="report-list" id="report-gates-design"></ul>
           </div>
         </div>
       </section>
 
       <section class="report-section">
-        <h3>Decision, Relationships, Work, Health</h3>
+        <h3 id="section-life-areas">Decision, Relationships, Work, Health</h3>
         <div class="report-grid">
           <div class="report-card">
-            <h4>Decision Tips</h4>
+            <h4 id="card-title-decision">Decision Tips</h4>
             <p id="report-decision">—</p>
           </div>
           <div class="report-card">
-            <h4>Relationships</h4>
+            <h4 id="card-title-relationships">Relationships</h4>
             <p id="report-relationships">—</p>
           </div>
           <div class="report-card">
-            <h4>Work</h4>
+            <h4 id="card-title-work">Work</h4>
             <p id="report-work">—</p>
           </div>
           <div class="report-card">
-            <h4>Health</h4>
+            <h4 id="card-title-health">Health</h4>
             <p id="report-health">—</p>
           </div>
         </div>
@@ -796,8 +808,198 @@
       }
     };
 
-    const reportData = readReportData() || fallbackData;
-    const chartData = reportData.chart || fallbackData.chart;
+    const normalizePlanetKey = (value) => {
+      const raw = String(value || "")
+        .trim()
+        .replace(/[\s_-]+/g, "")
+        .toLowerCase();
+      if (!raw) return "";
+      if (raw === "northnode" || raw === "north") return "northNode";
+      if (raw === "southnode" || raw === "south") return "southNode";
+      return raw;
+    };
+
+    const parseGateLine = (item) => {
+      if (item === null || item === undefined) return null;
+      if (typeof item === "number") {
+        if (!Number.isFinite(item)) return null;
+        const gate = Math.trunc(item);
+        const frac = Math.round(Math.abs(item - gate) * 10);
+        return { gate, line: frac >= 1 && frac <= 6 ? frac : null };
+      }
+      if (typeof item === "string") {
+        const raw = item.trim();
+        if (!raw) return null;
+        const match = raw.match(/^(\d{1,2})(?:[.,](\d))?$/);
+        if (match) {
+          const gate = Number(match[1]);
+          const line = match[2] ? Number(match[2]) : null;
+          return Number.isFinite(gate)
+            ? { gate, line: line && line >= 1 && line <= 6 ? line : null }
+            : null;
+        }
+        const numeric = Number(raw);
+        if (!Number.isFinite(numeric)) return null;
+        const gate = Math.trunc(numeric);
+        const frac = Math.round(Math.abs(numeric - gate) * 10);
+        return { gate, line: frac >= 1 && frac <= 6 ? frac : null };
+      }
+      if (Array.isArray(item)) {
+        const gate = Number(item[0]);
+        if (!Number.isFinite(gate)) return null;
+        const line = Number(item[1]);
+        return { gate, line: Number.isFinite(line) && line >= 1 && line <= 6 ? line : null };
+      }
+      if (item && typeof item === "object") {
+        if (item.gate !== undefined || item.line !== undefined) {
+          const gate = Number(item.gate);
+          if (!Number.isFinite(gate)) return null;
+          const line = Number(item.line);
+          return { gate, line: Number.isFinite(line) && line >= 1 && line <= 6 ? line : null };
+        }
+        if (item.value !== undefined) return parseGateLine(item.value);
+        if (item.number !== undefined) return parseGateLine(item.number);
+      }
+      return null;
+    };
+
+    const normalizeGateEntries = (value, type) => {
+      if (Array.isArray(value)) {
+        return value
+          .map((item, idx) => {
+            const parsed = parseGateLine(item);
+            if (!parsed) return null;
+            return {
+              gate: parsed.gate,
+              line: parsed.line,
+              planet: normalizePlanetKey((item && typeof item === "object" ? item.planet || item.name : "") || ""),
+              type,
+            };
+          })
+          .filter(Boolean);
+      }
+
+      if (value && typeof value === "object") {
+        return Object.entries(value)
+          .map(([planet, item]) => {
+            const parsed = parseGateLine(item);
+            if (!parsed) return null;
+            return {
+              gate: parsed.gate,
+              line: parsed.line,
+              planet: normalizePlanetKey(planet),
+              type,
+            };
+          })
+          .filter(Boolean);
+      }
+
+      return [];
+    };
+
+    const normalizeChannels = (value) => {
+      if (!Array.isArray(value)) return [];
+      return value
+        .map((channel) => {
+          if (!channel || typeof channel !== "object") return null;
+          const gates = Array.isArray(channel.gates)
+            ? channel.gates.map((gate) => Number(gate)).filter((gate) => Number.isFinite(gate))
+            : [];
+          const centers = Array.isArray(channel.centers)
+            ? channel.centers.map((center) => String(center || "").trim()).filter(Boolean)
+            : [];
+          return { gates, centers, type: String(channel.type || "") };
+        })
+        .filter(Boolean);
+    };
+
+    const normalizeCenters = (value) => {
+      if (!Array.isArray(value)) return [];
+      return value.map((center) => String(center || "").trim()).filter(Boolean);
+    };
+
+    const rawReportData = readReportData() || {};
+    const legacyHd =
+      rawReportData?.humanDesign ||
+      rawReportData?.human_design ||
+      rawReportData?.human_design_json ||
+      {};
+    const legacyGates = legacyHd?.gates || {};
+    const legacyCenters = legacyHd?.centers || {};
+    const chartSource = rawReportData?.chart || {};
+
+    const personalityGates = normalizeGateEntries(
+      chartSource.personalityGates ?? chartSource.personality ?? legacyGates.personality,
+      "P"
+    );
+    const designGates = normalizeGateEntries(
+      chartSource.designGates ?? chartSource.design ?? legacyGates.design,
+      "D"
+    );
+    const definedCenters = normalizeCenters(
+      chartSource.definedCenters ??
+      legacyCenters.definedNames ??
+      (Array.isArray(legacyCenters.defined) ? legacyCenters.defined.map((center) => center?.name) : [])
+    );
+    const activeChannels = normalizeChannels(
+      chartSource.activeChannels ?? legacyHd.channels
+    );
+
+    const summarySource = rawReportData?.summary || {};
+    const profileFromLegacy =
+      legacyHd?.profile?.numbers
+        ? String(legacyHd.profile.numbers)
+        : legacyHd?.profile?.name
+          ? String(legacyHd.profile.name)
+          : "";
+    const summary = {
+      type: summarySource.type ?? legacyHd?.type?.name ?? "—",
+      profile: summarySource.profile ?? profileFromLegacy ?? "—",
+      definition: summarySource.definition ?? legacyHd?.definition ?? "—",
+      authority: summarySource.authority ?? legacyHd?.authority?.name ?? legacyHd?.authority ?? "—",
+      strategy: summarySource.strategy ?? legacyHd?.type?.strategy ?? legacyHd?.strategy?.name ?? "—",
+      notSelf: summarySource.notSelf ?? legacyHd?.type?.notSelf ?? "—",
+      incarnationCross:
+        summarySource.incarnationCross ??
+        legacyHd?.incarnationCross?.fullName ??
+        legacyHd?.incarnationCross?.name ??
+        "—",
+    };
+
+    const userSource = rawReportData?.user || {};
+    const user = {
+      username: userSource.username ?? userSource.name ?? "—",
+      birthDate: userSource.birthDate ?? userSource.birth_date ?? "—",
+      birthTime: userSource.birthTime ?? userSource.birth_time ?? "—",
+      tzOffsetMinutes:
+        typeof userSource.tzOffsetMinutes === "number"
+          ? userSource.tzOffsetMinutes
+          : typeof userSource.tz_offset_minutes === "number"
+            ? userSource.tz_offset_minutes
+            : null,
+      city: userSource.city ?? userSource.birthPlace ?? userSource.birth_place ?? "—",
+      lat: userSource.lat ?? null,
+      lng: userSource.lng ?? null,
+    };
+
+    const reportData = {
+      ...fallbackData,
+      ...rawReportData,
+      summary: { ...fallbackData.summary, ...summary },
+      user: { ...fallbackData.user, ...user },
+      chart: {
+        activeChannels,
+        definedCenters,
+        personalityGates,
+        designGates,
+      },
+    };
+    const chartData = reportData.chart;
+    const locale = String(reportData?.locale || "sv-SE");
+    const isSwedish = locale.toLowerCase().startsWith("sv");
+    const t = (sv, en) => (isSwedish ? sv : en);
+    document.documentElement.lang = isSwedish ? "sv" : "en";
+    document.title = t("Human Design-rapport", "Human Design Report");
 
     const svg = document.getElementById("bodygraph");
     const colors = {
@@ -836,6 +1038,125 @@
       });
     };
 
+    const rawText = (value) => String(value ?? "").trim();
+    const normalize = (value) => String(value || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[\u2010-\u2015]/g, "-")
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const localizeLookup = (value, dict) => {
+      const raw = String(value || "").trim();
+      if (!raw) return "—";
+      if (!isSwedish) return raw;
+      const key = normalize(raw);
+      if (dict[key]) return dict[key];
+      const hit = Object.entries(dict).find(([candidate]) => normalize(candidate) === key);
+      return hit ? hit[1] : raw;
+    };
+    const HD_TYPE_SV = {
+      generator: "Generator",
+      "manifesting generator": "Manifesterande generator",
+      projector: "Projektor",
+      manifestor: "Manifestor",
+      reflector: "Reflektor",
+    };
+    const HD_STRATEGY_SV = {
+      "wait to respond": "Vänta på respons",
+      "wait to respond then inform": "Vänta på respons och informera sedan",
+      "wait to respond, then inform": "Vänta på respons och informera sedan",
+      "wait for the invitation": "Vänta på inbjudan",
+      "wait for invitation": "Vänta på inbjudan",
+      inform: "Informera",
+      "inform before acting": "Informera före handling",
+      "wait a lunar cycle": "Vänta en måncykel",
+      "wait for a lunar cycle": "Vänta en måncykel",
+    };
+    const HD_AUTHORITY_SV = {
+      "emotional authority": "Emotionell auktoritet",
+      "emotional (solar plexus) authority": "Emotionell auktoritet (solarplexus)",
+      "sacral authority": "Sakral auktoritet",
+      "splenic authority": "Mjältauktoritet",
+      "ego authority": "Egoauktoritet",
+      "ego projected authority": "Egoauktoritet",
+      "self projected authority": "Självprojicerad auktoritet",
+      "self-projected authority": "Självprojicerad auktoritet",
+      "mental authority": "Mental auktoritet",
+      "environmental authority": "Mental auktoritet",
+      "lunar authority": "Lunar auktoritet",
+      "no inner authority": "Ingen inre auktoritet",
+    };
+    const HD_DEFINITION_SV = {
+      "single definition": "Enkel definition",
+      single: "Enkel definition",
+      "split definition": "Delad definition",
+      split: "Delad definition",
+      "triple split definition": "Trippel-delad definition",
+      "triple split": "Trippel-delad definition",
+      "quadruple split definition": "Kvadrupel-delad definition",
+      "quadruple split": "Kvadrupel-delad definition",
+    };
+    const HD_CROSS_SV_EXACT = {
+      "the right angle cross of explanation": "Det rätvinkliga korset för förklaring",
+      "right angle cross of explanation": "Det rätvinkliga korset för förklaring",
+    };
+    const HD_CROSS_TERM_SV = {
+      explanation: "förklaring",
+      laws: "lagar",
+      planning: "planering",
+      service: "tjänst",
+      sphinx: "sfinksen",
+      rulership: "ledarskap",
+      penetration: "genomträngning",
+      contagion: "smitta",
+      incarnation: "inkarnation",
+      consciousness: "medvetande",
+      tension: "spänning",
+      vessel: "kärlet",
+      love: "kärlek",
+    };
+    const HD_NOTSELF_SV = {
+      frustration: "Frustration",
+      anger: "Ilska",
+      bitterness: "Bitterhet",
+      disappointment: "Besvikelse",
+    };
+    const localizeHdType = (value) => localizeLookup(value, HD_TYPE_SV);
+    const localizeHdStrategy = (value) => localizeLookup(value, HD_STRATEGY_SV);
+    const localizeHdAuthority = (value) => localizeLookup(value, HD_AUTHORITY_SV);
+    const localizeHdDefinition = (value) => localizeLookup(value, HD_DEFINITION_SV);
+    const localizeHdNotSelf = (value) => localizeLookup(value, HD_NOTSELF_SV);
+    const localizeHdCross = (value) => {
+      const raw = rawText(value);
+      if (!raw) return "—";
+      if (!isSwedish) return raw;
+      const key = normalize(raw);
+      if (HD_CROSS_SV_EXACT[key]) return HD_CROSS_SV_EXACT[key];
+      const cleaned = raw.replace(/^the\s+/i, "").trim();
+      const match = cleaned.match(/^(right angle|left angle|juxtaposition)\s+cross\s+of\s+(.+)$/i);
+      if (!match) return raw;
+      const orientationKey = normalize(match[1]);
+      const orientation =
+        orientationKey === "right angle"
+          ? "Det rätvinkliga"
+          : orientationKey === "left angle"
+            ? "Det vänstervinkliga"
+            : "Juxtapositions";
+      const tail = String(match[2] || "")
+        .split(/\s+/)
+        .map((part) => {
+          const wordKey = normalize(part);
+          return HD_CROSS_TERM_SV[wordKey] || String(part).toLowerCase();
+        })
+        .join(" ")
+        .trim();
+      if (!tail) return raw;
+      return orientationKey === "juxtaposition"
+        ? `${orientation}korset för ${tail}`
+        : `${orientation} korset för ${tail}`;
+    };
+
     const iconMap = {
       sun: "#icon-sun",
       earth: "#icon-earth",
@@ -850,6 +1171,58 @@
       uranus: "#icon-uranus",
       neptune: "#icon-neptune",
       pluto: "#icon-pluto"
+    };
+
+    const renderStaticLabels = () => {
+      setText("meta-title-report-for", t("Rapport för:", "Report for:"));
+      setText("meta-label-birthdate", t("Födelsedatum", "Date of birth"));
+      setText("meta-label-birthtime", t("Födelsetid", "Time of birth"));
+      setText("meta-label-offset", t("UTC-offset", "UTC offset"));
+      setText("meta-label-city", t("Födelseort", "City of birth"));
+      setText("meta-label-coords", t("Koordinater", "Coordinates"));
+      setText("meta-label-generated", t("Rapport skapad", "Report generated"));
+
+      setText("sidebar-label-type", t("Typ", "Type"));
+      setText("sidebar-label-profile", t("Profil", "Profile"));
+      setText("sidebar-label-definition", t("Definition", "Definition"));
+      setText("sidebar-label-authority", t("Inre auktoritet", "Inner Authority"));
+      setText("sidebar-label-strategy", t("Strategi", "Strategy"));
+      setText("sidebar-label-notself", t("Icke-jag-tema", "Not-Self Theme"));
+      setText("sidebar-label-cross", t("Inkarnationskors", "Incarnation Cross"));
+
+      setText("main-title-1", t("Human Design-chart", "Human Design Chart"));
+      setText("main-brand-1", t("Beräknad av Sputnik & Veloklang", "Calculated by Sputnik & Veloklang"));
+      setText("action-share", t("Dela", "Share"));
+      setText("action-download", t("Ladda ner", "Download"));
+      setText("action-print", t("Skriv ut", "Print"));
+      setText("design-header", t("Design", "Design"));
+      setText("personality-header", t("Personlighet", "Personality"));
+      setText("footer-generated-by", t("skapad av sputnet.space", "generated by sputnet.space"));
+
+      setText("main-title-2", t("Human Design-chart", "Human Design Chart"));
+      setText("main-brand-2", t("beräknad av Sputnik", "as calculated by Sputnik"));
+      setText("main-title-3", t("Human Design-berättelse", "Human Design Narrative"));
+      setText("main-brand-3", t("beräknad av Sputnik", "as calculated by Sputnik"));
+      setText("main-title-4", t("Kanaler & gates", "Channels & Gates"));
+      setText("main-brand-4", t("beräknad av Sputnik", "as calculated by Sputnik"));
+
+      setText("section-essence", t("Essens", "Essence"));
+      setText("card-title-type-strategy", t("Typ & strategi", "Type & Strategy"));
+      setText("card-title-authority", t("Auktoritet", "Authority"));
+      setText("card-title-profile", t("Profil", "Profile"));
+      setText("card-title-cross", t("Inkarnationskors", "Incarnation Cross"));
+      setText("section-centers", t("Definierade & öppna center", "Defined & Undefined Centers"));
+      setText("card-title-defined", t("Definierade", "Defined"));
+      setText("card-title-undefined", t("Odefinierade", "Undefined"));
+      setText("section-channels", t("Definierade kanaler", "Defined Channels"));
+      setText("section-gates", t("Gates", "Gates"));
+      setText("card-title-gates-personality", t("Personlighet", "Personality"));
+      setText("card-title-gates-design", t("Design", "Design"));
+      setText("section-life-areas", t("Beslut, relationer, arbete, hälsa", "Decision, Relationships, Work, Health"));
+      setText("card-title-decision", t("Beslutstips", "Decision Tips"));
+      setText("card-title-relationships", t("Relationer", "Relationships"));
+      setText("card-title-work", t("Arbete", "Work"));
+      setText("card-title-health", t("Hälsa", "Health"));
     };
 
     const buildEntry = (item) => {
@@ -875,13 +1248,18 @@
     };
 
     const renderLists = () => {
-      setText("sidebar-type", reportData.summary?.type);
+      const typeValue = localizeHdType(reportData.summary?.type);
+      const strategyValue = localizeHdStrategy(reportData.summary?.strategy);
+      const authorityValue = localizeHdAuthority(reportData.summary?.authority);
+      const definitionValue = localizeHdDefinition(reportData.summary?.definition);
+      const notSelfValue = localizeHdNotSelf(reportData.summary?.notSelf);
+      setText("sidebar-type", typeValue);
       setText("sidebar-profile", reportData.summary?.profile);
-      setText("sidebar-definition", reportData.summary?.definition);
-      setText("sidebar-authority", reportData.summary?.authority);
-      setText("sidebar-strategy", reportData.summary?.strategy);
-      setText("sidebar-notself", reportData.summary?.notSelf);
-      setText("sidebar-cross", reportData.summary?.incarnationCross);
+      setText("sidebar-definition", definitionValue);
+      setText("sidebar-authority", authorityValue);
+      setText("sidebar-strategy", strategyValue);
+      setText("sidebar-notself", notSelfValue);
+      setText("sidebar-cross", localizeHdCross(reportData.summary?.incarnationCross));
       setText("sidebar-username", reportData.user?.username);
       setText("sidebar-birthdate", reportData.user?.birthDate);
       setText("sidebar-birthtime", reportData.user?.birthTime);
@@ -915,58 +1293,96 @@
       const lat = fmtCoord(reportData.user?.lat, "N", "S");
       const lng = fmtCoord(reportData.user?.lng, "E", "W");
       setText("sidebar-coords", lat === "—" || lng === "—" ? "—" : `${lat}, ${lng}`);
-      setText("sidebar-generated", new Date().toLocaleString());
+      setText("sidebar-generated", new Date().toLocaleString(locale));
 
       const designList = document.getElementById("design-list");
       const personalityList = document.getElementById("personality-list");
       if (designList) {
         designList.innerHTML = "";
-        (chartData.designGates || []).forEach((item) => designList.appendChild(buildEntry(item)));
+        const designGates = Array.isArray(chartData.designGates) ? chartData.designGates : [];
+        if (designGates.length) {
+          designGates.forEach((item) => designList.appendChild(buildEntry(item)));
+        } else {
+          const fallback = document.createElement("div");
+          fallback.className = "entry";
+          fallback.textContent = "—";
+          designList.appendChild(fallback);
+        }
       }
       if (personalityList) {
         personalityList.innerHTML = "";
-        (chartData.personalityGates || []).forEach((item) =>
-          personalityList.appendChild(buildEntry(item))
-        );
+        const personalityGates = Array.isArray(chartData.personalityGates) ? chartData.personalityGates : [];
+        if (personalityGates.length) {
+          personalityGates.forEach((item) =>
+            personalityList.appendChild(buildEntry(item))
+          );
+        } else {
+          const fallback = document.createElement("div");
+          fallback.className = "entry";
+          fallback.textContent = "—";
+          personalityList.appendChild(fallback);
+        }
       }
     };
 
     const warmSentence = (value, fallback) => value && value !== "—" ? value : fallback;
 
     const centerName = (key) => {
-      const map = {
-        head: "Head",
-        ajna: "Ajna",
-        throat: "Throat",
-        g: "G Center",
-        ego: "Ego/Will",
-        spleen: "Spleen",
-        sacral: "Sacral",
-        solar: "Solar Plexus",
-        root: "Root"
-      };
+      const map = isSwedish
+        ? {
+            head: "Hjässa",
+            ajna: "Ajna",
+            throat: "Hals",
+            g: "G-center",
+            ego: "Ego/Vilja",
+            spleen: "Mjälte",
+            sacral: "Sakral",
+            solar: "Solarplexus",
+            root: "Rot",
+          }
+        : {
+            head: "Head",
+            ajna: "Ajna",
+            throat: "Throat",
+            g: "G Center",
+            ego: "Ego/Will",
+            spleen: "Spleen",
+            sacral: "Sacral",
+            solar: "Solar Plexus",
+            root: "Root",
+          };
       return map[key] || key;
     };
 
     const renderNarrative = () => {
       const summary = reportData.summary || {};
-      const type = summary.type || "—";
-      const strategy = summary.strategy || "—";
-      const authority = summary.authority || "—";
+      const type = localizeHdType(summary.type || "—");
+      const strategy = localizeHdStrategy(summary.strategy || "—");
+      const authority = localizeHdAuthority(summary.authority || "—");
       const profile = summary.profile || "—";
-      const definition = summary.definition || "—";
-      const cross = summary.incarnationCross || "—";
+      const definition = localizeHdDefinition(summary.definition || "—");
+      const cross = localizeHdCross(summary.incarnationCross || "—");
 
-      const name = reportData.user?.username || "you";
-      const essence = `${name}, your chart reads like a living map. As a ${type}, your energy is here to move in its own rhythm, not by force but by alignment. When you honor your ${String(strategy).toLowerCase()}, your path feels both inevitable and strangely effortless — like doors open just as you arrive.`;
+      const name = reportData.user?.username || t("du", "you");
+      const essence = isSwedish
+        ? `${name}, din Human Design-karta fungerar som en levande kompass. Som ${type} rör sig din energi bäst i rätt timing, inte genom att forcera. När du följer din strategi (${String(strategy).toLowerCase()}) uppstår mer flyt och färre onödiga stopp.`
+        : `${name}, your chart reads like a living map. As a ${type}, your energy is here to move in its own rhythm, not by force but by alignment. When you honor your ${String(strategy).toLowerCase()}, your path feels both inevitable and strangely effortless — like doors open just as you arrive.`;
 
-      const typeStrategy = `Type and Strategy describe the how. ${type} is your energetic baseline. Strategy is the compass — follow ${strategy} and you’ll notice less resistance and more magnetic timing.`;
+      const typeStrategy = isSwedish
+        ? `Typ och strategi beskriver hur din energi fungerar i praktiken. ${type} är din grundfrekvens, och strategin ${strategy} hjälper dig välja rätt timing med mindre motstånd.`
+        : `Type and Strategy describe the how. ${type} is your energetic baseline. Strategy is the compass — follow ${strategy} and you’ll notice less resistance and more magnetic timing.`;
 
-      const authorityText = `Authority is your inner oracle. With ${authority}, clarity isn’t rushed — it arrives in layers. Give your body time to settle and the right yes/no will feel unmistakable.`;
+      const authorityText = isSwedish
+        ? `Auktoriteten är din inre beslutsmetod. Med ${authority} vinner du på att låta klarhet landa i kroppen innan du bestämmer dig.`
+        : `Authority is your inner oracle. With ${authority}, clarity isn’t rushed — it arrives in layers. Give your body time to settle and the right yes/no will feel unmistakable.`;
 
-      const profileText = `Profile is your life role. ${profile} describes how you learn, influence, and mature. You’re not here to be a copy of anyone — you’re here to be a lived example.`;
+      const profileText = isSwedish
+        ? `Profilen visar din livsroll. ${profile} beskriver hur du lär, påverkar och mognar över tid.`
+        : `Profile is your life role. ${profile} describes how you learn, influence, and mature. You’re not here to be a copy of anyone — you’re here to be a lived example.`;
 
-      const crossText = `Incarnation Cross hints at your life theme. ${cross} is the story thread that keeps weaving through your experiences, often showing you why you’re here more than how.`;
+      const crossText = isSwedish
+        ? `Inkarnationskorset visar ett återkommande livstema. ${cross} blir ofta en röd tråd som förklarar varför vissa erfarenheter återkommer.`
+        : `Incarnation Cross hints at your life theme. ${cross} is the story thread that keeps weaving through your experiences, often showing you why you’re here more than how.`;
 
       const definedKeys = reportData.chart?.definedCenters || [];
       const centersDefined = definedKeys.map(centerName);
@@ -995,10 +1411,18 @@
       setList("report-gates-personality", pg);
       setList("report-gates-design", dg);
 
-      const decision = `${name}, use ${authority} as your decision rhythm. If you’re unsure, slow down. Your clearest yes is the one that stays true after the emotional tide passes.`;
-      const relationships = `${name}, you’re most magnetic when you’re not performing. Let the right people recognize you first — then respond. The correct relationships feel like resonance, not pursuit.`;
-      const work = `${name}, work thrives when you’re in the right role. Choose environments that respect your strategy and give you room to refine, guide, and shape outcomes.`;
-      const health = `${name}, your body is the truth‑barometer. When you’re aligned, energy feels clean and sustainable. When you’re off, your body will tell you — earlier than your mind.`;
+      const decision = isSwedish
+        ? `${name}, använd ${authority} som beslutsrytm. Om du är osäker: sakta ner. Det tydligaste ja:et är det som fortfarande känns sant efter att känslan har lagt sig.`
+        : `${name}, use ${authority} as your decision rhythm. If you’re unsure, slow down. Your clearest yes is the one that stays true after the emotional tide passes.`;
+      const relationships = isSwedish
+        ? `${name}, du blir mest magnetisk när du inte försöker prestera en roll. Låt rätt människor känna igen dig först och svara därifrån.`
+        : `${name}, you’re most magnetic when you’re not performing. Let the right people recognize you first — then respond. The correct relationships feel like resonance, not pursuit.`;
+      const work = isSwedish
+        ? `${name}, arbetet flyter bäst i roller som respekterar din strategi och ger dig utrymme att förfina och påverka med kvalitet.`
+        : `${name}, work thrives when you’re in the right role. Choose environments that respect your strategy and give you room to refine, guide, and shape outcomes.`;
+      const health = isSwedish
+        ? `${name}, kroppen är din sanningsmätare. När du är i linje känns energin ren och hållbar. När du är ur linje signalerar kroppen det tidigt.`
+        : `${name}, your body is the truth‑barometer. When you’re aligned, energy feels clean and sustainable. When you’re off, your body will tell you — earlier than your mind.`;
 
       setText("report-decision", decision);
       setText("report-relationships", relationships);
@@ -1291,9 +1715,14 @@
       }
     }
 
+    renderStaticLabels();
     renderLists();
-    renderBodygraph();
     renderNarrative();
+    try {
+      renderBodygraph();
+    } catch (err) {
+      console.error("standalone_report_bodygraph_error", err);
+    }
 
     if (shouldPrint) {
       window.addEventListener("load", () => {

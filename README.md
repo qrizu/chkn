@@ -1,7 +1,7 @@
 # chkn
 
-CHKN (Chicken Race) pa `chkn.sputnet.space` ar ett real-time spel dar du kan
-utmana vanner i antingen ett chicken run (vadslagning) eller en 5-kamp. Servern
+CHKN (Chick'n Race) pa `chkn.sputnet.world` ar ett real-time spel dar du kan
+utmana vänner i antingen ett Chick'n run (vadslagning) eller en 5-kamp. Servern
 ar alltid domare och ar den enda sanningen for poang och state.
 
 Om man spelar ensam far man mota en AI-bot som heter `Sputnik` (samma bot som i
@@ -15,21 +15,40 @@ flodet (authoritative server).
 
 **Valuta**
 
-Allt ackumuleras i en gemensam heltalsvaluta: `CHKN-poang`.
+Allt ackumuleras i en gemensam heltalsvaluta: `CHKN-poang`. Valutan är en egen token Spux eller Sputnix.
+
+Onboarding:
+- Alla nya medlemmar får 500 Spux start.
+
 
 ## 0) Lobby
 
 1. Skapa match (invite-lank/kod)
-2. Valj lage: Chicken Run eller 5-kamp
+2. Valj lage: Chick'n Run eller 5-kamp
 3. Ready-check -> start
+
+## Frontend config (Vite env)
+
+CHKN web uses Vite env vars in `apps/web/`.
+
+Defaults:
+- Development: `apps/web/.env.development`
+- Production: `apps/web/.env.production`
+
+Local override:
+- Copy `apps/web/.env.local.example` to `apps/web/.env.local` and edit.
+
+Ytzy base URL:
+- `VITE_YTZY_URL` (example: `https://ytzy-dev.sputnet.world` for dev, `https://ytzy.sputnet.world` for prod)
 
 ## 5-kamp: spelordning
 
 1. Yatzy
 2. Black Jack
-3. Fragesport
-4. Musikquiz
-5. Texas Hold'em
+middleware svart eller rött, kvitt eller dubbelt på roulette, man kan skippa oxå
+3. Quiz 4x4 16 questions different levels and price, only one can answer, if wrong or out of time, the the others can guess in a round robin fashion,  categories are based on what all our charts are telling us, Western Astrology, Human Design, Chinese Lore and aliens
+4. Social Agility
+5. Texas Hold'em, 
 
 ## 1) Yatzy (finns redan)
 
@@ -41,17 +60,23 @@ Startstack efter Yatzy = `yatzyScore * 10`
 
 Spara: `stack = yatzyScore * 10`
 
+Bonusar i Yatzy (Spux):
+- Over 200 poang: +50 Spux
+- Over 250 poang: +100 Spux
+- Over 300 poang: +300 Spux
+- Over high score (nu 321 poang): jackpot. Inkassera lika mycket Spux som övriga har tillsammans
+
 ## 2) Black Jack (byggs)
 
 Malt: skapa swing + taktik men snabbt.
 
 Upplagg (MVP-vanligt):
 
-- Du har 5 rundor.
+- Du har 10 rundor var.
 - En runda: du kan betta pa 0-7 rutor (klassisk table layout).
 - Bet per ruta: 10-100.
 - Varje aktiv ruta ar en separat hand mot dealer.
-- Efter 5 rundor: summera `bj_delta` (netto vinst/forlust).
+- Efter 10 rundor: summera `bj_delta` (netto vinst/forlust).
 - Uppdatera stack: `stack = stack + bj_delta`.
 
 Regelknappar per hand: Hit / Stand / Double / Split (valfritt i MVP). Insurance
@@ -68,7 +93,7 @@ Definiera for blackjack:
 
 ## Mellanspel A) Roulette (mellan 2 och 3)
 
-Bara blackjack-vinst far riskas.
+Bara blackjack-vinst får riskas.
 
 Spelaren valjer:
 
@@ -87,14 +112,14 @@ loop-maxa.
 
 **Kategorival**
 
-- 6 kategorier totalt.
+- 6 kategorier totalt. 4 Frågor i varje 200,400,600,800 får man för varje level 
 - Round-robin: varje spelare valjer 2 kategorier var.
 - Totalt blir det `2 * antal_spelare` kategori-val.
 
 **Fragepaket**
 
 - Generera fragor per valt kategori (ex 5 fragor per val).
-- Svartighetsmix per kategori-batch: 20% latt, 60% medel, 20% svar.
+- Svartighetsmix per kategori-batch: level 1 level 2 level 3 och level 4 var 4an är smartast
 
 **Poangmodell (forslag)**
 
@@ -134,27 +159,8 @@ Utfall:
 - Forlust: `stack -= bet`
 - Vid lika: push (0) rekommenderas.
 
-## 4) Musikquiz
+## 4) ToBeDecided (EN form av rapakalja kanske? helst artmemory) 
 
-- 5 rundor.
-- Spela ett klipp per rond (10-20s eller progressivt langre).
-- Forst korrekt far poang.
-
-Poangforslag:
-
-- Grund: 200
-- Tidsbonus likt trivia, men kortare `T` (ex 8s)
-
-Alternativt (om flera far gissa samtidigt):
-
-- 1a: 200
-- 2a: 100
-- Ovrriga: 0
-
-Uppdatera: `stack += music_points`
-
-Praktiskt: tank pa rattigheter. Spotify previews om de finns, annars
-royalty-free bibliotek.
 
 ## 5) Texas Hold'em
 
@@ -223,7 +229,7 @@ Event-sourcing light (rekommenderat):
 
 ## Drift
 
-- Doman: `chkn.sputnet.space`
+- Doman: `chkn.sputnet.world`
 - Auth: Authentik
 - Backend: Node (samma upplagg som Yatzy)
 - Frontend: Vite (samma upplagg som Yatzy)

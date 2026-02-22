@@ -12,6 +12,7 @@ export type PersistedMatchState = {
   yatzySubmissions: Array<[string, number]>;
   yatzyMatchId: string | null;
   hostUserId: string;
+  blackjack?: unknown;
   seq: number;
 };
 

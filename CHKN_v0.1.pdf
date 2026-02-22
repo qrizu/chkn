@@ -21,7 +21,7 @@ BT
 0 -14 Td
 () Tj
 0 -14 Td
-(CHKN \(Chicken Race\) pa `chkn.sputnet.space` ar ett real-time spel dar du kan) Tj
+(CHKN \(Chicken Race\) pa `chkn.sputnet.world` ar ett real-time spel dar du kan) Tj
 0 -14 Td
 (utmana vanner i antingen ett chicken run \(vadslagning\) eller en 5-kamp. Servern) Tj
 0 -14 Td
@@ -467,7 +467,7 @@ BT
 0 -14 Td
 () Tj
 0 -14 Td
-(- Doman: `chkn.sputnet.space`) Tj
+(- Doman: `chkn.sputnet.world`) Tj
 0 -14 Td
 (- Auth: Authentik) Tj
 0 -14 Td
