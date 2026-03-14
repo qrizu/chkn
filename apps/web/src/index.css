@@ -385,6 +385,19 @@ body.tarot-cinema-body {
   gap: 16px;
 }
 
+.profile-social {
+  background:
+    radial-gradient(circle at top left, rgba(216, 118, 64, 0.16), transparent 34%),
+    linear-gradient(145deg, #171817 0%, #20221d 55%, #262219 100%);
+}
+
+.social-grid {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
 .summary-stack {
   display: grid;
   gap: 16px;
@@ -636,6 +649,178 @@ body.tarot-cinema-body {
   margin: 6px 0 0;
   font-size: 0.85rem;
   opacity: 0.75;
+}
+
+.membership-card,
+.friends-card {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+
+.social-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.social-metric {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.24);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.membership-pill,
+.friend-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.membership-pill.is-active {
+  background: rgba(91, 173, 114, 0.22);
+  color: #daf8de;
+}
+
+.membership-pill.is-member {
+  background: rgba(236, 176, 75, 0.18);
+  color: #ffe7bd;
+}
+
+.membership-pill.is-inactive {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.membership-pill.is-neutral,
+.friend-chip {
+  background: rgba(0, 0, 0, 0.26);
+  color: rgba(255, 244, 226, 0.88);
+}
+
+.social-form {
+  display: grid;
+  gap: 10px;
+}
+
+.social-form-inline {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+}
+
+.social-form-grow {
+  min-width: 0;
+}
+
+.social-form-label {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.social-form-label span {
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.7;
+}
+
+.social-form .input {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(7, 10, 11, 0.38);
+  color: #fff5e8;
+}
+
+.social-form .input::placeholder {
+  color: rgba(255, 245, 232, 0.5);
+}
+
+.social-form .input:focus {
+  outline: none;
+  border-color: rgba(231, 156, 91, 0.75);
+  box-shadow: 0 0 0 3px rgba(231, 156, 91, 0.18);
+}
+
+.paywall-note {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(228, 145, 82, 0.14);
+  border: 1px solid rgba(228, 145, 82, 0.26);
+  color: #ffe3c0;
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.friend-sections {
+  display: grid;
+  gap: 14px;
+}
+
+.friend-block {
+  display: grid;
+  gap: 10px;
+}
+
+.friend-block h4 {
+  margin: 0;
+  font-size: 0.92rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.friend-list {
+  display: grid;
+  gap: 10px;
+}
+
+.friend-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.friend-meta {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.friend-meta strong,
+.friend-meta span {
+  overflow-wrap: anywhere;
+}
+
+.friend-meta span {
+  font-size: 0.82rem;
+  opacity: 0.72;
+}
+
+.friend-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .summary-item {
@@ -2076,6 +2261,14 @@ button {
   transform: translateY(-1px);
 }
 
+.btn-primary:disabled,
+.btn-ghost:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
 .nav-link {
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
@@ -3283,5 +3476,26 @@ button {
   .avatar-style-toggle {
     display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .social-grid,
+  .social-metrics,
+  .social-form-inline {
+    grid-template-columns: 1fr;
+  }
+
+  .friend-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .friend-actions {
+    justify-content: stretch;
+  }
+
+  .friend-actions > button,
+  .friend-actions > span {
+    width: 100%;
+    text-align: center;
   }
 }

@@ -39,7 +39,7 @@ Local override:
 - Copy `apps/web/.env.local.example` to `apps/web/.env.local` and edit.
 
 Ytzy base URL:
-- `VITE_YTZY_URL` (example: `https://ytzy-dev.sputnet.world` for dev, `https://ytzy.sputnet.world` for prod)
+- `VITE_YTZY_URL` (example: `https://ytzy.sputnet.world`)
 
 ## 5-kamp: spelordning
 
@@ -283,14 +283,12 @@ psql "$DATABASE_URL" -f /home/qrizu/sputnet/services/chkn/db/schema.sql
 2. Satt env vars for API:
 
 ```
-DATABASE_URL=postgres://.../ytzy-dev
+DATABASE_URL=postgres://.../ytzy
 CHKN_DB_SCHEMA=chkn
 REDIS_URL=redis://localhost:6379
 ```
 ### Bygg och Kör hjälp, kör från var som, bygger om med hjälp av python gyy och lite annat som är onödigt att isntallera lokalt, utan bar ha med sig på byggservern, python3 vill annars kalla på pip och köra virtuella runtimes,  
 ```
-docker compose -f /home/qrizu/sputnet/docker-compose.yml build chkn-backend-dev
-docker compose -f /home/qrizu/sputnet/docker-compose.yml up -d chkn-backend-dev
 docker compose -f /home/qrizu/sputnet/docker-compose.yml build chkn-backend
 docker compose -f /home/qrizu/sputnet/docker-compose.yml up -d chkn-backend
 

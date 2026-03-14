@@ -177,6 +177,126 @@ CREATE TABLE IF NOT EXISTS profile_insights (
 CREATE INDEX IF NOT EXISTS idx_profile_insights_user_id
   ON profile_insights(user_id);
 
+CREATE TABLE IF NOT EXISTS membership_registration_codes (
+  code            TEXT PRIMARY KEY,
+  label           TEXT NOT NULL DEFAULT 'Membership code',
+  active          BOOLEAN NOT NULL DEFAULT TRUE,
+  grants_tier     TEXT NOT NULL DEFAULT 'member',
+  grants_ai       BOOLEAN NOT NULL DEFAULT TRUE,
+  max_uses        INT NULL,
+  use_count       INT NOT NULL DEFAULT 0,
+  expires_at      TIMESTAMPTZ NULL,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'membership_registration_codes_use_count_chk'
+  ) THEN
+    ALTER TABLE membership_registration_codes
+      ADD CONSTRAINT membership_registration_codes_use_count_chk
+      CHECK (use_count >= 0 AND (max_uses IS NULL OR max_uses >= 1));
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'trg_membership_registration_codes_updated_at'
+  ) THEN
+    CREATE TRIGGER trg_membership_registration_codes_updated_at
+    BEFORE UPDATE ON membership_registration_codes
+    FOR EACH ROW EXECUTE FUNCTION chkn_set_updated_at();
+  END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS user_memberships (
+  user_id            TEXT PRIMARY KEY,
+  username           TEXT NULL,
+  display_name       TEXT NULL,
+  email              TEXT NULL,
+  active             BOOLEAN NOT NULL DEFAULT FALSE,
+  tier               TEXT NOT NULL DEFAULT 'free',
+  ai_access          BOOLEAN NOT NULL DEFAULT FALSE,
+  registration_code  TEXT NULL REFERENCES membership_registration_codes(code) ON DELETE SET NULL,
+  joined_at          TIMESTAMPTZ NULL,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'user_memberships_tier_chk'
+  ) THEN
+    ALTER TABLE user_memberships
+      ADD CONSTRAINT user_memberships_tier_chk
+      CHECK (tier IN ('free', 'member', 'premium'));
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'trg_user_memberships_updated_at'
+  ) THEN
+    CREATE TRIGGER trg_user_memberships_updated_at
+    BEFORE UPDATE ON user_memberships
+    FOR EACH ROW EXECUTE FUNCTION chkn_set_updated_at();
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_user_memberships_active
+  ON user_memberships(active, username);
+
+CREATE TABLE IF NOT EXISTS user_friendships (
+  requester_id  TEXT NOT NULL REFERENCES user_memberships(user_id) ON DELETE CASCADE,
+  addressee_id  TEXT NOT NULL REFERENCES user_memberships(user_id) ON DELETE CASCADE,
+  status        TEXT NOT NULL DEFAULT 'pending',
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  responded_at  TIMESTAMPTZ NULL,
+  PRIMARY KEY (requester_id, addressee_id)
+);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'user_friendships_status_chk'
+  ) THEN
+    ALTER TABLE user_friendships
+      ADD CONSTRAINT user_friendships_status_chk
+      CHECK (status IN ('pending', 'accepted', 'declined'));
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'user_friendships_not_self_chk'
+  ) THEN
+    ALTER TABLE user_friendships
+      ADD CONSTRAINT user_friendships_not_self_chk
+      CHECK (requester_id <> addressee_id);
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'trg_user_friendships_updated_at'
+  ) THEN
+    CREATE TRIGGER trg_user_friendships_updated_at
+    BEFORE UPDATE ON user_friendships
+    FOR EACH ROW EXECUTE FUNCTION chkn_set_updated_at();
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_user_friendships_addressee
+  ON user_friendships(addressee_id, status, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS user_tarot_daily (
   user_id          TEXT NOT NULL REFERENCES user_profiles(user_id) ON DELETE CASCADE,
   draw_date        DATE NOT NULL,

@@ -32,6 +32,53 @@ type UserInfo = {
   name?: string | null;
 };
 
+type MembershipPayload = {
+  user_id: string;
+  username?: string | null;
+  display_name?: string | null;
+  email?: string | null;
+  active: boolean;
+  tier: string;
+  ai_access: boolean;
+  registration_code?: string | null;
+  joined_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+type FriendRow = {
+  user_id: string;
+  username?: string | null;
+  display_name?: string | null;
+  status?: string;
+  direction?: string;
+  relation?: string;
+  created_at?: string;
+  responded_at?: string | null;
+  active?: boolean;
+  tier?: string;
+  ai_access?: boolean;
+};
+
+type FriendCompatibility = {
+  overall: number;
+  band: string;
+  summary: string;
+  friend: {
+    user_id: string;
+    username?: string | null;
+    display_name?: string | null;
+    tier?: string;
+    ai_access?: boolean;
+  };
+  dimensions: Array<{
+    key: string;
+    label: string;
+    score: number;
+    note: string;
+  }>;
+};
+
 type ProfileInsights = {
   insight_id: string;
   summary_json: {
@@ -665,6 +712,21 @@ export default function App() {
   const [profileError, setProfileError] = useState<string | null>(null);
   const [profileDirty, setProfileDirty] = useState(false);
   const [profileInfo, setProfileInfo] = useState<ProfilePayload | null>(null);
+  const [membership, setMembership] = useState<MembershipPayload | null>(null);
+  const [membershipLoading, setMembershipLoading] = useState(true);
+  const [membershipBusy, setMembershipBusy] = useState(false);
+  const [membershipCode, setMembershipCode] = useState("");
+  const [membershipStatus, setMembershipStatus] = useState<string | null>(null);
+  const [membershipError, setMembershipError] = useState<string | null>(null);
+  const [friendsAccepted, setFriendsAccepted] = useState<FriendRow[]>([]);
+  const [friendsIncoming, setFriendsIncoming] = useState<FriendRow[]>([]);
+  const [friendsOutgoing, setFriendsOutgoing] = useState<FriendRow[]>([]);
+  const [friendsLoading, setFriendsLoading] = useState(false);
+  const [friendsStatus, setFriendsStatus] = useState<string | null>(null);
+  const [friendsError, setFriendsError] = useState<string | null>(null);
+  const [friendSearchQuery, setFriendSearchQuery] = useState("");
+  const [friendSearchResults, setFriendSearchResults] = useState<FriendRow[]>([]);
+  const [friendCompatibilityLoadingId, setFriendCompatibilityLoadingId] = useState<string | null>(null);
   const [avatarVersion, setAvatarVersion] = useState<number>(() => Date.now());
   const [avatarUploadBusy, setAvatarUploadBusy] = useState(false);
   const [avatarUploadStatus, setAvatarUploadStatus] = useState<string | null>(null);
@@ -1391,6 +1453,7 @@ export default function App() {
           upright: entry.card.upright,
           reversed: entry.card.reversed,
         }));
+      let finalStatus: string | null = null;
       setOracleAiLoading(true);
       setOracleStatus(tr("Madame Flood läser korten...", "Madame Flood is reading the cards..."));
       try {
@@ -1415,13 +1478,23 @@ export default function App() {
         });
         const data = await res.json().catch(() => null);
         if (!res.ok || !data?.ok || typeof data.reply !== "string") {
-          throw new Error(data?.message || data?.error || "oracle_failed");
+          const error = new Error(data?.message || data?.error || "oracle_failed") as Error & { code?: string };
+          error.code = typeof data?.error === "string" ? data.error : res.status === 402 ? "membership_required" : "oracle_failed";
+          throw error;
         }
         const reply = data.reply.trim();
         setOracleMessages((prev) => [...prev, { role: "oracle", text: reply }]);
         speakOracle(reply);
         return reply;
-      } catch {
+      } catch (error) {
+        const errorCode = (error as { code?: string } | null)?.code || (error as Error | null)?.message || "oracle_failed";
+        if (errorCode === "membership_required") {
+          finalStatus = tr(
+            "AI-läsningar kräver aktivt medlemskap. Aktivera medlemskapet på profilsidan först.",
+            "AI readings require an active membership. Activate your membership on the profile page first."
+          );
+          return finalStatus;
+        }
         const fallback =
           tr(
             "Slöjan skakar. Stanna kvar och tala en gång till så jag kan fortsätta din läsning.",
@@ -1432,7 +1505,7 @@ export default function App() {
         return fallback;
       } finally {
         setOracleAiLoading(false);
-        setOracleStatus(null);
+        setOracleStatus(finalStatus);
       }
     },
     [
@@ -1451,6 +1524,15 @@ export default function App() {
   );
 
   const startOracleSession = useCallback(() => {
+    if (!(membership?.active && membership.ai_access && membership.tier !== "free")) {
+      setOracleStatus(
+        tr(
+          "AI-läsningar kräver aktivt medlemskap. Aktivera medlemskapet på profilsidan först.",
+          "AI readings require an active membership. Activate your membership on the profile page first."
+        )
+      );
+      return;
+    }
     setOracleSessionStarted(true);
     setOracleAnswers([]);
     setOracleVoiceTranscript("");
@@ -1480,7 +1562,7 @@ export default function App() {
       ),
       seedMessages
     );
-  }, [isSwedish, oracleLanguage, requestOracleReply, speakOracle, tr]);
+  }, [isSwedish, membership?.active, membership?.ai_access, membership?.tier, oracleLanguage, requestOracleReply, speakOracle, tr]);
 
   const dealLoveReadingCards = useCallback(
     (mode: "initial" | "clarifier") => {
@@ -3355,11 +3437,91 @@ export default function App() {
     const clean = base.replace(/\/$/, "");
     return clean.endsWith("/api") ? `${clean}/profile` : `${clean}/api/profile`;
   }, []);
+  const membershipUrl = useMemo(() => {
+    const base = (import.meta.env.VITE_API_URL || "").trim();
+    if (!base) return `${window.location.origin}/api/membership`;
+    const clean = base.replace(/\/$/, "");
+    return clean.endsWith("/api") ? `${clean}/membership` : `${clean}/api/membership`;
+  }, []);
+  const membershipRedeemUrl = useMemo(() => {
+    const base = (import.meta.env.VITE_API_URL || "").trim();
+    if (!base) return `${window.location.origin}/api/membership/redeem`;
+    const clean = base.replace(/\/$/, "");
+    return clean.endsWith("/api") ? `${clean}/membership/redeem` : `${clean}/api/membership/redeem`;
+  }, []);
+  const friendsUrl = useMemo(() => {
+    const base = (import.meta.env.VITE_API_URL || "").trim();
+    if (!base) return `${window.location.origin}/api/friends`;
+    const clean = base.replace(/\/$/, "");
+    return clean.endsWith("/api") ? `${clean}/friends` : `${clean}/api/friends`;
+  }, []);
+  const friendSearchUrl = useMemo(() => {
+    const base = (import.meta.env.VITE_API_URL || "").trim();
+    if (!base) return `${window.location.origin}/api/friends/search`;
+    const clean = base.replace(/\/$/, "");
+    return clean.endsWith("/api") ? `${clean}/friends/search` : `${clean}/api/friends/search`;
+  }, []);
+  const friendRequestUrl = useMemo(() => {
+    const base = (import.meta.env.VITE_API_URL || "").trim();
+    if (!base) return `${window.location.origin}/api/friends/request`;
+    const clean = base.replace(/\/$/, "");
+    return clean.endsWith("/api") ? `${clean}/friends/request` : `${clean}/api/friends/request`;
+  }, []);
+  const friendRespondUrl = useMemo(() => {
+    const base = (import.meta.env.VITE_API_URL || "").trim();
+    if (!base) return `${window.location.origin}/api/friends/respond`;
+    const clean = base.replace(/\/$/, "");
+    return clean.endsWith("/api") ? `${clean}/friends/respond` : `${clean}/api/friends/respond`;
+  }, []);
+  const friendRemoveUrl = useMemo(() => {
+    const base = (import.meta.env.VITE_API_URL || "").trim();
+    if (!base) return `${window.location.origin}/api/friends/remove`;
+    const clean = base.replace(/\/$/, "");
+    return clean.endsWith("/api") ? `${clean}/friends/remove` : `${clean}/api/friends/remove`;
+  }, []);
+  const friendCompatibilityUrlBase = useMemo(() => {
+    const base = (import.meta.env.VITE_API_URL || "").trim();
+    if (!base) return `${window.location.origin}/api/friends/compatibility`;
+    const clean = base.replace(/\/$/, "");
+    return clean.endsWith("/api") ? `${clean}/friends/compatibility` : `${clean}/api/friends/compatibility`;
+  }, []);
   const authBaseUrl = useMemo(() => {
     const base = (import.meta.env.VITE_AUTHENTIK_URL || "https://auth.sputnet.world").trim();
     return base.replace(/\/$/, "");
   }, []);
   const dateLocale = useMemo(() => oracleLanguage || "sv-SE", [oracleLanguage]);
+  const aiMembershipUnlocked = Boolean(membership?.active && membership.ai_access && membership.tier !== "free");
+  const friendLabel = useCallback(
+    (friend: FriendRow | FriendCompatibility["friend"] | null | undefined) =>
+      String(friend?.display_name || friend?.username || friend?.user_id || "—"),
+    []
+  );
+  const localizeMembershipTier = useCallback(
+    (tier?: string | null) => {
+      switch (String(tier || "").toLowerCase()) {
+        case "premium":
+          return tr("Premium", "Premium");
+        case "member":
+          return tr("Medlem", "Member");
+        default:
+          return tr("Fri", "Free");
+      }
+    },
+    [tr]
+  );
+  const formatShortDate = useCallback(
+    (value?: string | null) => {
+      if (!value) return null;
+      const date = new Date(value);
+      if (Number.isNaN(date.valueOf())) return null;
+      return date.toLocaleDateString(dateLocale, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+    },
+    [dateLocale]
+  );
   const defaultBirthDate = useMemo(() => {
     const d = new Date();
     d.setFullYear(d.getFullYear() - 26);
@@ -3457,6 +3619,252 @@ export default function App() {
     };
     loadProfile();
   }, [profileUrl, tr]);
+
+  const loadMembership = useCallback(async () => {
+    try {
+      setMembershipLoading(true);
+      const res = await fetch(membershipUrl, { credentials: "include", cache: "no-store" });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.ok) {
+        setMembership((data.membership as MembershipPayload | null) ?? null);
+        setMembershipError(null);
+      } else if (res.status === 401) {
+        setMembership(null);
+        setMembershipError(null);
+      } else {
+        setMembership(null);
+        setMembershipError(data?.message || tr("Kunde inte läsa medlemskap.", "Could not load membership."));
+      }
+    } catch {
+      setMembership(null);
+      setMembershipError(tr("Kunde inte läsa medlemskap.", "Could not load membership."));
+    } finally {
+      setMembershipLoading(false);
+    }
+  }, [membershipUrl, tr]);
+
+  useEffect(() => {
+    loadMembership();
+  }, [loadMembership]);
+
+  const loadFriends = useCallback(async () => {
+    if (!membership?.active) {
+      setFriendsAccepted([]);
+      setFriendsIncoming([]);
+      setFriendsOutgoing([]);
+      setFriendSearchResults([]);
+      setFriendsLoading(false);
+      return;
+    }
+    try {
+      setFriendsLoading(true);
+      const res = await fetch(friendsUrl, { credentials: "include", cache: "no-store" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.ok) {
+        setFriendsError(data?.message || tr("Kunde inte läsa vänner.", "Could not load friends."));
+        return;
+      }
+      const next = data.friends || {};
+      setFriendsAccepted(Array.isArray(next.accepted) ? (next.accepted as FriendRow[]) : []);
+      setFriendsIncoming(Array.isArray(next.incoming) ? (next.incoming as FriendRow[]) : []);
+      setFriendsOutgoing(Array.isArray(next.outgoing) ? (next.outgoing as FriendRow[]) : []);
+      setFriendsError(null);
+    } catch {
+      setFriendsError(tr("Kunde inte läsa vänner.", "Could not load friends."));
+    } finally {
+      setFriendsLoading(false);
+    }
+  }, [friendsUrl, membership?.active, tr]);
+
+  useEffect(() => {
+    loadFriends();
+  }, [loadFriends]);
+
+  const redeemMembershipCode = useCallback(async () => {
+    const code = membershipCode.trim();
+    if (!code) return;
+    try {
+      setMembershipBusy(true);
+      setMembershipError(null);
+      setMembershipStatus(tr("Aktiverar medlemskap...", "Activating membership..."));
+      const res = await fetch(membershipRedeemUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ code }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.ok) {
+        setMembershipError(data?.message || tr("Koden kunde inte användas.", "Could not redeem the code."));
+        setMembershipStatus(null);
+        return;
+      }
+      setMembership((data.membership as MembershipPayload | null) ?? null);
+      setMembershipCode("");
+      setMembershipStatus(tr("Medlemskapet är aktivt.", "Membership is now active."));
+      setMembershipError(null);
+      await loadFriends();
+    } catch {
+      setMembershipError(tr("Koden kunde inte användas.", "Could not redeem the code."));
+      setMembershipStatus(null);
+    } finally {
+      setMembershipBusy(false);
+    }
+  }, [loadFriends, membershipCode, membershipRedeemUrl, tr]);
+
+  const searchMembers = useCallback(async () => {
+    const q = friendSearchQuery.trim();
+    if (!q || !membership?.active) {
+      setFriendSearchResults([]);
+      return;
+    }
+    try {
+      setFriendsStatus(tr("Söker medlemmar...", "Searching members..."));
+      const res = await fetch(`${friendSearchUrl}?q=${encodeURIComponent(q)}`, {
+        credentials: "include",
+        cache: "no-store",
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.ok) {
+        setFriendsError(data?.message || tr("Kunde inte söka medlemmar.", "Could not search members."));
+        setFriendsStatus(null);
+        return;
+      }
+      setFriendSearchResults(Array.isArray(data.results) ? (data.results as FriendRow[]) : []);
+      setFriendsStatus(null);
+      setFriendsError(null);
+    } catch {
+      setFriendsError(tr("Kunde inte söka medlemmar.", "Could not search members."));
+      setFriendsStatus(null);
+    }
+  }, [friendSearchQuery, friendSearchUrl, membership?.active, tr]);
+
+  const sendFriendRequest = useCallback(
+    async (targetUserId: string) => {
+      try {
+        setFriendsStatus(tr("Skickar vänförfrågan...", "Sending friend request..."));
+        setFriendsError(null);
+        const res = await fetch(friendRequestUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ targetUserId }),
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.ok) {
+          setFriendsError(data?.message || tr("Kunde inte skicka förfrågan.", "Could not send request."));
+          setFriendsStatus(null);
+          return;
+        }
+        setFriendsStatus(
+          data?.status === "accepted"
+            ? tr("Ni är nu vänner.", "You are now friends.")
+            : tr("Vänförfrågan skickad.", "Friend request sent.")
+        );
+        await loadFriends();
+        await searchMembers();
+      } catch {
+        setFriendsError(tr("Kunde inte skicka förfrågan.", "Could not send request."));
+        setFriendsStatus(null);
+      }
+    },
+    [friendRequestUrl, loadFriends, searchMembers, tr]
+  );
+
+  const respondToFriendRequest = useCallback(
+    async (requesterUserId: string, action: "accept" | "decline") => {
+      try {
+        setFriendsStatus(action === "accept" ? tr("Accepterar...", "Accepting...") : tr("Avböjer...", "Declining..."));
+        setFriendsError(null);
+        const res = await fetch(friendRespondUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ requesterUserId, action }),
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.ok) {
+          setFriendsError(data?.message || tr("Kunde inte uppdatera förfrågan.", "Could not update request."));
+          setFriendsStatus(null);
+          return;
+        }
+        setFriendsStatus(action === "accept" ? tr("Vänskap bekräftad.", "Friendship confirmed.") : tr("Förfrågan avböjd.", "Request declined."));
+        await loadFriends();
+        await searchMembers();
+      } catch {
+        setFriendsError(tr("Kunde inte uppdatera förfrågan.", "Could not update request."));
+        setFriendsStatus(null);
+      }
+    },
+    [friendRespondUrl, loadFriends, searchMembers, tr]
+  );
+
+  const removeFriend = useCallback(
+    async (targetUserId: string) => {
+      try {
+        setFriendsStatus(tr("Tar bort relation...", "Removing connection..."));
+        setFriendsError(null);
+        const res = await fetch(friendRemoveUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ targetUserId }),
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.ok) {
+          setFriendsError(data?.message || tr("Kunde inte ta bort relationen.", "Could not remove connection."));
+          setFriendsStatus(null);
+          return;
+        }
+        setFriendsStatus(tr("Relationen togs bort.", "Connection removed."));
+        await loadFriends();
+        await searchMembers();
+      } catch {
+        setFriendsError(tr("Kunde inte ta bort relationen.", "Could not remove connection."));
+        setFriendsStatus(null);
+      }
+    },
+    [friendRemoveUrl, loadFriends, searchMembers, tr]
+  );
+
+  const openCompatibilityModal = useCallback(
+    async (targetUserId: string) => {
+      try {
+        setFriendCompatibilityLoadingId(targetUserId);
+        setFriendsError(null);
+        const res = await fetch(`${friendCompatibilityUrlBase}/${encodeURIComponent(targetUserId)}`, {
+          credentials: "include",
+          cache: "no-store",
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.ok || !data.compatibility) {
+          setFriendsError(data?.message || tr("Kunde inte läsa kompatibilitet.", "Could not load compatibility."));
+          return;
+        }
+        const compatibility = data.compatibility as FriendCompatibility;
+        const body = [
+          compatibility.summary,
+          "",
+          ...compatibility.dimensions.map(
+            (dimension) =>
+              `${dimension.label}: ${dimension.score}/100\n${dimension.note}`
+          ),
+        ].join("\n");
+        openModal(
+          tr("Hur ni funkar ihop", "How you work together"),
+          body,
+          `${friendLabel(compatibility.friend)} · ${compatibility.band} · ${compatibility.overall}/100`,
+          undefined,
+          "💞"
+        );
+      } catch {
+        setFriendsError(tr("Kunde inte läsa kompatibilitet.", "Could not load compatibility."));
+      } finally {
+        setFriendCompatibilityLoadingId(null);
+      }
+    },
+    [friendCompatibilityUrlBase, friendLabel, openModal, tr]
+  );
 
   useEffect(() => {
     if (profileLoading) return;
@@ -4195,6 +4603,16 @@ export default function App() {
       setAvatarUploadStatus(null);
       return;
     }
+    if (avatarUploadStyle === "gta5" && !aiMembershipUnlocked) {
+      setAvatarUploadError(
+        tr(
+          "GTA 5-stil kräver aktivt medlemskap. Aktivera medlemskapet på profilsidan först.",
+          "GTA 5 style requires an active membership. Activate your membership on the profile page first."
+        )
+      );
+      setAvatarUploadStatus(null);
+      return;
+    }
     setAvatarUploadBusy(true);
     setAvatarUploadError(null);
     setAvatarUploadStatus(
@@ -4217,6 +4635,9 @@ export default function App() {
         if (data?.error === "image_too_large") {
           throw new Error("image_too_large");
         }
+        if (data?.error === "membership_required" || response.status === 402) {
+          throw new Error("membership_required");
+        }
         throw new Error("avatar_upload_failed");
       }
       setAvatarVersion(Date.now());
@@ -4227,6 +4648,13 @@ export default function App() {
       if (code === "image_too_large") {
         setAvatarUploadError(
           tr("Bilden är för stor efter uppladdning. Max är 8 MB.", "Image is too large after upload. Max size is 8 MB.")
+        );
+      } else if (code === "membership_required") {
+        setAvatarUploadError(
+          tr(
+            "GTA 5-stil kräver aktivt medlemskap. Aktivera medlemskapet på profilsidan först.",
+            "GTA 5 style requires an active membership. Activate your membership on the profile page first."
+          )
         );
       } else {
         setAvatarUploadError(tr("Kunde inte ladda upp avatar.", "Could not upload avatar."));
@@ -4633,11 +5061,19 @@ export default function App() {
                               type="button"
                               className={`avatar-style-choice ${avatarUploadStyle === "gta5" ? "active" : ""}`}
                               onClick={() => setAvatarUploadStyle("gta5")}
-                              disabled={avatarUploadBusy}
+                              disabled={avatarUploadBusy || !aiMembershipUnlocked}
                             >
                               {tr("GTA 5-stil", "GTA 5 style")}
                             </button>
                           </div>
+                          {!aiMembershipUnlocked ? (
+                            <p className="paywall-note">
+                              {tr(
+                                "GTA 5-stil genereras med AI och låses upp när medlemskapet har aktiverats.",
+                                "GTA 5 style is AI-generated and unlocks once your membership is active."
+                              )}
+                            </p>
+                          ) : null}
                         </div>
                         <label className="avatar-editor-control">
                           <span>{tr("Zoom", "Zoom")}: {avatarDraftZoom.toFixed(2)}x</span>
@@ -5356,6 +5792,297 @@ export default function App() {
         </div>
       </section>
           ) : null}
+
+      {!profileMissing ? (
+        <section className="profile-card profile-social">
+          <p className="eyebrow">{tr("Medlemskap och vänner", "Membership and friends")}</p>
+          <div className="social-grid">
+            <article className="summary-card membership-card">
+              <div className="summary-card-header">
+                <h3>{tr("Medlemskap", "Membership")}</h3>
+                <span
+                  className={`membership-pill ${
+                    aiMembershipUnlocked ? "is-active" : membership?.active ? "is-member" : "is-inactive"
+                  }`}
+                >
+                  {membershipLoading
+                    ? tr("Laddar", "Loading")
+                    : aiMembershipUnlocked
+                      ? tr("AI upplåst", "AI unlocked")
+                      : membership?.active
+                        ? tr("Aktiv", "Active")
+                        : tr("Inte aktiv", "Inactive")}
+                </span>
+              </div>
+
+              <p className="summary-detail">
+                {aiMembershipUnlocked
+                  ? tr(
+                      "Ditt medlemskap är aktivt och AI-funktionerna är upplåsta i tarot och avatarverktyget.",
+                      "Your membership is active and AI features are unlocked in tarot and the avatar tool."
+                    )
+                  : membership?.active
+                    ? tr(
+                        "Du är medlem men AI-funktionerna är fortfarande låsta. Använd en registreringskod som ger AI-åtkomst.",
+                        "You are a member but AI features are still locked. Redeem a registration code that grants AI access."
+                      )
+                    : tr(
+                        "Aktivera medlemskapet med en registreringskod för att kunna lägga till vänner och låsa upp AI-funktionerna.",
+                        "Activate membership with a registration code to add friends and unlock AI features."
+                      )}
+              </p>
+
+              <div className="social-metrics">
+                <div className="social-metric">
+                  <span className="summary-label">{tr("Nivå", "Tier")}</span>
+                  <span className="summary-value">{localizeMembershipTier(membership?.tier)}</span>
+                </div>
+                <div className="social-metric">
+                  <span className="summary-label">{tr("AI-åtkomst", "AI access")}</span>
+                  <span className="summary-value">{aiMembershipUnlocked ? tr("Ja", "Yes") : tr("Nej", "No")}</span>
+                </div>
+                <div className="social-metric">
+                  <span className="summary-label">{tr("Aktiverat", "Joined")}</span>
+                  <span className="summary-value">{formatShortDate(membership?.joined_at) || "—"}</span>
+                </div>
+              </div>
+
+              {!aiMembershipUnlocked ? (
+                <form
+                  className="social-form"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void redeemMembershipCode();
+                  }}
+                >
+                  <label className="social-form-label">
+                    <span>{tr("Registreringskod", "Registration code")}</span>
+                    <input
+                      className="input"
+                      type="text"
+                      value={membershipCode}
+                      onChange={(event) => setMembershipCode(event.target.value)}
+                      placeholder={tr("Skriv in din kod", "Enter your code")}
+                      autoComplete="off"
+                      disabled={membershipBusy}
+                    />
+                  </label>
+                  <button className="btn-primary" type="submit" disabled={membershipBusy || !membershipCode.trim()}>
+                    {membershipBusy ? tr("Aktiverar...", "Activating...") : tr("Aktivera medlemskap", "Activate membership")}
+                  </button>
+                </form>
+              ) : (
+                <p className="paywall-note">
+                  {tr(
+                    "AI-låsta funktioner som Madame Flood och GTA 5-avatar är nu tillgängliga för ditt konto.",
+                    "AI-locked features like Madame Flood and the GTA 5 avatar are now available for your account."
+                  )}
+                </p>
+              )}
+
+              {membershipStatus ? <span className="status">{membershipStatus}</span> : null}
+              {membershipError ? <span className="status bad">{membershipError}</span> : null}
+            </article>
+
+            <article className="summary-card friends-card">
+              <div className="summary-card-header">
+                <h3>{tr("Vänner", "Friends")}</h3>
+                <span className="membership-pill is-neutral">
+                  {friendsAccepted.length} {tr("kopplingar", "connections")}
+                </span>
+              </div>
+
+              <p className="summary-detail">
+                {tr(
+                  "Bjud in andra medlemmar, acceptera förfrågningar och se hur ni fungerar ihop när ni blivit vänner.",
+                  "Invite other members, accept requests, and see how you work together once you become friends."
+                )}
+              </p>
+
+              {!membership?.active ? (
+                <p className="paywall-note">
+                  {tr(
+                    "Vänsystemet öppnas när medlemskapet har aktiverats med en registreringskod.",
+                    "The friend system opens once membership has been activated with a registration code."
+                  )}
+                </p>
+              ) : (
+                <>
+                  <form
+                    className="social-form social-form-inline"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void searchMembers();
+                    }}
+                  >
+                    <label className="social-form-label social-form-grow">
+                      <span>{tr("Sök medlem", "Find a member")}</span>
+                      <input
+                        className="input"
+                        type="text"
+                        value={friendSearchQuery}
+                        onChange={(event) => setFriendSearchQuery(event.target.value)}
+                        placeholder={tr("Namn, användarnamn eller id", "Name, username, or id")}
+                        autoComplete="off"
+                      />
+                    </label>
+                    <button className="btn-primary" type="submit" disabled={friendSearchQuery.trim().length < 2 || friendsLoading}>
+                      {tr("Sök", "Search")}
+                    </button>
+                  </form>
+
+                  {friendSearchResults.length ? (
+                    <div className="friend-block">
+                      <h4>{tr("Sökresultat", "Search results")}</h4>
+                      <div className="friend-list">
+                        {friendSearchResults.map((friend) => (
+                          <div key={`search-${friend.user_id}`} className="friend-row">
+                            <div className="friend-meta">
+                              <strong>{friendLabel(friend)}</strong>
+                              <span>
+                                @{friend.username || friend.user_id} · {localizeMembershipTier(friend.tier)}
+                              </span>
+                            </div>
+                            <div className="friend-actions">
+                              {friend.relation === "accepted" ? (
+                                <button
+                                  className="btn-ghost"
+                                  type="button"
+                                  onClick={() => void openCompatibilityModal(friend.user_id)}
+                                  disabled={friendCompatibilityLoadingId === friend.user_id}
+                                >
+                                  {friendCompatibilityLoadingId === friend.user_id
+                                    ? tr("Laddar...", "Loading...")
+                                    : tr("Se matchning", "See match")}
+                                </button>
+                              ) : friend.relation === "incoming" ? (
+                                <>
+                                  <button className="btn-primary" type="button" onClick={() => void respondToFriendRequest(friend.user_id, "accept")}>
+                                    {tr("Acceptera", "Accept")}
+                                  </button>
+                                  <button className="btn-ghost" type="button" onClick={() => void respondToFriendRequest(friend.user_id, "decline")}>
+                                    {tr("Avböj", "Decline")}
+                                  </button>
+                                </>
+                              ) : friend.relation === "outgoing" ? (
+                                <span className="friend-chip">{tr("Väntar på svar", "Waiting for reply")}</span>
+                              ) : (
+                                <button className="btn-primary" type="button" onClick={() => void sendFriendRequest(friend.user_id)}>
+                                  {tr("Lägg till", "Add friend")}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : friendSearchQuery.trim().length >= 2 && !friendsLoading ? (
+                    <p className="summary-detail">{tr("Inga medlemmar matchade sökningen än.", "No members matched that search yet.")}</p>
+                  ) : null}
+
+                  <div className="friend-sections">
+                    <div className="friend-block">
+                      <h4>{tr("Vänner", "Friends")}</h4>
+                      {friendsAccepted.length ? (
+                        <div className="friend-list">
+                          {friendsAccepted.map((friend) => (
+                            <div key={`accepted-${friend.user_id}`} className="friend-row">
+                              <div className="friend-meta">
+                                <strong>{friendLabel(friend)}</strong>
+                                <span>
+                                  @{friend.username || friend.user_id}
+                                  {friend.responded_at ? ` · ${formatShortDate(friend.responded_at)}` : ""}
+                                </span>
+                              </div>
+                              <div className="friend-actions">
+                                <button
+                                  className="btn-primary"
+                                  type="button"
+                                  onClick={() => void openCompatibilityModal(friend.user_id)}
+                                  disabled={friendCompatibilityLoadingId === friend.user_id}
+                                >
+                                  {friendCompatibilityLoadingId === friend.user_id
+                                    ? tr("Laddar...", "Loading...")
+                                    : tr("Hur ni funkar ihop", "How you match")}
+                                </button>
+                                <button className="btn-ghost" type="button" onClick={() => void removeFriend(friend.user_id)}>
+                                  {tr("Ta bort", "Remove")}
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="summary-detail">{tr("Inga vänner än. Sök efter en medlem för att skicka din första förfrågan.", "No friends yet. Search for a member to send your first request.")}</p>
+                      )}
+                    </div>
+
+                    <div className="friend-block">
+                      <h4>{tr("Inkommande", "Incoming")}</h4>
+                      {friendsIncoming.length ? (
+                        <div className="friend-list">
+                          {friendsIncoming.map((friend) => (
+                            <div key={`incoming-${friend.user_id}`} className="friend-row">
+                              <div className="friend-meta">
+                                <strong>{friendLabel(friend)}</strong>
+                                <span>
+                                  @{friend.username || friend.user_id}
+                                  {friend.created_at ? ` · ${formatShortDate(friend.created_at)}` : ""}
+                                </span>
+                              </div>
+                              <div className="friend-actions">
+                                <button className="btn-primary" type="button" onClick={() => void respondToFriendRequest(friend.user_id, "accept")}>
+                                  {tr("Acceptera", "Accept")}
+                                </button>
+                                <button className="btn-ghost" type="button" onClick={() => void respondToFriendRequest(friend.user_id, "decline")}>
+                                  {tr("Avböj", "Decline")}
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="summary-detail">{tr("Inga inkommande förfrågningar just nu.", "No incoming requests right now.")}</p>
+                      )}
+                    </div>
+
+                    <div className="friend-block">
+                      <h4>{tr("Skickade", "Sent")}</h4>
+                      {friendsOutgoing.length ? (
+                        <div className="friend-list">
+                          {friendsOutgoing.map((friend) => (
+                            <div key={`outgoing-${friend.user_id}`} className="friend-row">
+                              <div className="friend-meta">
+                                <strong>{friendLabel(friend)}</strong>
+                                <span>
+                                  @{friend.username || friend.user_id}
+                                  {friend.created_at ? ` · ${formatShortDate(friend.created_at)}` : ""}
+                                </span>
+                              </div>
+                              <div className="friend-actions">
+                                <span className="friend-chip">{tr("Väntar på svar", "Waiting for reply")}</span>
+                                <button className="btn-ghost" type="button" onClick={() => void removeFriend(friend.user_id)}>
+                                  {tr("Avbryt", "Cancel")}
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="summary-detail">{tr("Du har inga obesvarade förfrågningar.", "You have no unanswered requests.")}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {friendsLoading ? <span className="status">{tr("Laddar vänner...", "Loading friends...")}</span> : null}
+                  {friendsStatus ? <span className="status">{friendsStatus}</span> : null}
+                  {friendsError ? <span className="status bad">{friendsError}</span> : null}
+                </>
+              )}
+            </article>
+          </div>
+        </section>
+      ) : null}
 
       {!profileMissing ? (
       <section className="profile-card astro-chart">
@@ -6088,7 +6815,7 @@ export default function App() {
             <article className="summary-card tarot-oracle-card madame-panel">
               <div className="tarot-oracle-controls">
                 <div className="tarot-oracle-buttons">
-                  <button className="btn-primary" type="button" onClick={startOracleSession}>
+                  <button className="btn-primary" type="button" onClick={startOracleSession} disabled={!aiMembershipUnlocked}>
                     {tr("Gå in i Madame Floods session", "Enter Madame Flood's session")}
                   </button>
                   <button
@@ -6099,6 +6826,14 @@ export default function App() {
                     {tr("Röst", "Voice")} {oracleVoiceEnabled ? tr("På", "On") : tr("Av", "Off")}
                   </button>
                 </div>
+                {!aiMembershipUnlocked ? (
+                  <p className="paywall-note">
+                    {tr(
+                      "Madame Floods AI-läsning är låst tills du aktiverar medlemskapet med en registreringskod på profilsidan.",
+                      "Madame Flood's AI reading stays locked until you activate membership with a registration code on the profile page."
+                    )}
+                  </p>
+                ) : null}
                 <div className="tarot-oracle-preferences">
                   <label className="tarot-pref">
                     <span>{tr("Språk", "Language")}</span>

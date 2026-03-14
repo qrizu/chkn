@@ -605,6 +605,14 @@ const apiErrorMessage = (code: string, locale: string): string => {
   switch (code) {
     case "unauthorized":
       return localeText(locale, "Inloggning krävs.", "Authentication required.");
+    case "membership_required":
+      return localeText(locale, "Aktivt medlemskap krävs för den här AI-funktionen.", "Active membership required for this AI feature.");
+    case "friendship_required":
+      return localeText(locale, "Ni behöver vara vänner för att se den här profilen.", "You need to be friends to view this profile.");
+    case "membership_code_invalid":
+      return localeText(locale, "Registreringskoden är ogiltig eller förbrukad.", "The registration code is invalid or exhausted.");
+    case "profile_required":
+      return localeText(locale, "Båda behöver ha sparat profil för att matchningen ska fungera.", "Both users need saved profiles for compatibility.");
     case "missing_message":
       return localeText(locale, "Meddelande saknas.", "Missing message.");
     case "oracle_failed":
@@ -651,6 +659,389 @@ const fetchAuthentikUserInfo = async (headers: Record<string, string>) => {
   } catch {
     return null;
   }
+};
+
+const normalizeMembershipCode = (value: unknown): string =>
+  String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "");
+
+const membershipSeedCodes = String(process.env.MEMBERSHIP_REGISTRATION_CODES || "")
+  .split(",")
+  .map((code) => normalizeMembershipCode(code))
+  .filter(Boolean);
+
+let ensureMembershipTablesPromise: Promise<void> | null = null;
+
+const ensureMembershipTables = async (): Promise<void> => {
+  if (!ensureMembershipTablesPromise) {
+    ensureMembershipTablesPromise = (async () => {
+      await pool.query(
+        `CREATE TABLE IF NOT EXISTS membership_registration_codes (
+           code TEXT PRIMARY KEY,
+           label TEXT NOT NULL DEFAULT 'Membership code',
+           active BOOLEAN NOT NULL DEFAULT TRUE,
+           grants_tier TEXT NOT NULL DEFAULT 'member',
+           grants_ai BOOLEAN NOT NULL DEFAULT TRUE,
+           max_uses INT NULL,
+           use_count INT NOT NULL DEFAULT 0,
+           expires_at TIMESTAMPTZ NULL,
+           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+         )`
+      );
+      await pool.query(
+        `CREATE TABLE IF NOT EXISTS user_memberships (
+           user_id TEXT PRIMARY KEY,
+           username TEXT NULL,
+           display_name TEXT NULL,
+           email TEXT NULL,
+           active BOOLEAN NOT NULL DEFAULT FALSE,
+           tier TEXT NOT NULL DEFAULT 'free',
+           ai_access BOOLEAN NOT NULL DEFAULT FALSE,
+           registration_code TEXT NULL REFERENCES membership_registration_codes(code) ON DELETE SET NULL,
+           joined_at TIMESTAMPTZ NULL,
+           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+         )`
+      );
+      await pool.query(
+        `CREATE TABLE IF NOT EXISTS user_friendships (
+           requester_id TEXT NOT NULL REFERENCES user_memberships(user_id) ON DELETE CASCADE,
+           addressee_id TEXT NOT NULL REFERENCES user_memberships(user_id) ON DELETE CASCADE,
+           status TEXT NOT NULL DEFAULT 'pending',
+           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+           responded_at TIMESTAMPTZ NULL,
+           PRIMARY KEY (requester_id, addressee_id)
+         )`
+      );
+      await pool.query(
+        `CREATE INDEX IF NOT EXISTS idx_user_memberships_active
+         ON user_memberships(active, username)`
+      );
+      await pool.query(
+        `CREATE INDEX IF NOT EXISTS idx_user_friendships_addressee
+         ON user_friendships(addressee_id, status, created_at DESC)`
+      );
+      await pool.query(
+        `DO $$
+         BEGIN
+           IF NOT EXISTS (
+             SELECT 1 FROM pg_constraint WHERE conname = 'membership_registration_codes_use_count_chk'
+           ) THEN
+             ALTER TABLE membership_registration_codes
+               ADD CONSTRAINT membership_registration_codes_use_count_chk
+               CHECK (use_count >= 0 AND (max_uses IS NULL OR max_uses >= 1));
+           END IF;
+           IF NOT EXISTS (
+             SELECT 1 FROM pg_constraint WHERE conname = 'user_memberships_tier_chk'
+           ) THEN
+             ALTER TABLE user_memberships
+               ADD CONSTRAINT user_memberships_tier_chk
+               CHECK (tier IN ('free', 'member', 'premium'));
+           END IF;
+           IF NOT EXISTS (
+             SELECT 1 FROM pg_constraint WHERE conname = 'user_friendships_status_chk'
+           ) THEN
+             ALTER TABLE user_friendships
+               ADD CONSTRAINT user_friendships_status_chk
+               CHECK (status IN ('pending', 'accepted', 'declined'));
+           END IF;
+           IF NOT EXISTS (
+             SELECT 1 FROM pg_constraint WHERE conname = 'user_friendships_not_self_chk'
+           ) THEN
+             ALTER TABLE user_friendships
+               ADD CONSTRAINT user_friendships_not_self_chk
+               CHECK (requester_id <> addressee_id);
+           END IF;
+           IF NOT EXISTS (
+             SELECT 1 FROM pg_trigger WHERE tgname = 'trg_membership_registration_codes_updated_at'
+           ) THEN
+             CREATE TRIGGER trg_membership_registration_codes_updated_at
+             BEFORE UPDATE ON membership_registration_codes
+             FOR EACH ROW EXECUTE FUNCTION chkn_set_updated_at();
+           END IF;
+           IF NOT EXISTS (
+             SELECT 1 FROM pg_trigger WHERE tgname = 'trg_user_memberships_updated_at'
+           ) THEN
+             CREATE TRIGGER trg_user_memberships_updated_at
+             BEFORE UPDATE ON user_memberships
+             FOR EACH ROW EXECUTE FUNCTION chkn_set_updated_at();
+           END IF;
+           IF NOT EXISTS (
+             SELECT 1 FROM pg_trigger WHERE tgname = 'trg_user_friendships_updated_at'
+           ) THEN
+             CREATE TRIGGER trg_user_friendships_updated_at
+             BEFORE UPDATE ON user_friendships
+             FOR EACH ROW EXECUTE FUNCTION chkn_set_updated_at();
+           END IF;
+         END $$;`
+      );
+
+      if (membershipSeedCodes.length) {
+        for (const code of membershipSeedCodes) {
+          await pool.query(
+            `INSERT INTO membership_registration_codes (code, label, active, grants_tier, grants_ai)
+             VALUES ($1, $2, TRUE, 'member', TRUE)
+             ON CONFLICT (code) DO NOTHING`,
+            [code, "Seeded membership code"]
+          );
+        }
+      }
+    })().catch((err) => {
+      ensureMembershipTablesPromise = null;
+      throw err;
+    });
+  }
+  return ensureMembershipTablesPromise;
+};
+
+const getMembershipRow = async (userId: string) => {
+  await ensureMembershipTables();
+  const result = await pool.query(
+    `SELECT user_id, username, display_name, email, active, tier, ai_access, registration_code, joined_at, created_at, updated_at
+     FROM user_memberships
+     WHERE user_id = $1`,
+    [userId]
+  );
+  return result.rowCount ? result.rows[0] : null;
+};
+
+const membershipHasAiAccess = (membership: any): boolean =>
+  Boolean(membership?.active && membership?.ai_access && membership?.tier && membership.tier !== "free");
+
+const syncMembershipIdentity = async (userId: string, headers: Record<string, string>) => {
+  await ensureMembershipTables();
+  const userInfo = await fetchAuthentikUserInfo(headers);
+  const username = String(userInfo?.username ?? headers["x-authentik-username"] ?? "").trim() || null;
+  const displayName = String(userInfo?.name ?? headers["x-authentik-name"] ?? "").trim() || null;
+  const email = String(userInfo?.email ?? headers["x-authentik-email"] ?? "").trim() || null;
+  await pool.query(
+    `INSERT INTO user_memberships (user_id, username, display_name, email)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (user_id)
+     DO UPDATE SET
+       username = COALESCE(EXCLUDED.username, user_memberships.username),
+       display_name = COALESCE(EXCLUDED.display_name, user_memberships.display_name),
+       email = COALESCE(EXCLUDED.email, user_memberships.email),
+       updated_at = NOW()`,
+    [userId, username, displayName, email]
+  );
+  return getMembershipRow(userId);
+};
+
+const areAcceptedFriends = async (leftUserId: string, rightUserId: string): Promise<boolean> => {
+  if (!leftUserId || !rightUserId) return false;
+  if (leftUserId === rightUserId) return true;
+  await ensureMembershipTables();
+  const result = await pool.query(
+    `SELECT 1
+     FROM user_friendships
+     WHERE status = 'accepted'
+       AND (
+         (requester_id = $1 AND addressee_id = $2)
+         OR
+         (requester_id = $2 AND addressee_id = $1)
+       )
+     LIMIT 1`,
+    [leftUserId, rightUserId]
+  );
+  return Number(result.rowCount || 0) > 0;
+};
+
+const canAccessProfilePayload = async (authUserId: string, requestedId: string): Promise<boolean> => {
+  if (!authUserId || !requestedId) return false;
+  if (authUserId === requestedId) return true;
+  return areAcceptedFriends(authUserId, requestedId);
+};
+
+const ASTRO_SIGN_ELEMENT: Record<string, string> = {
+  Aries: "fire",
+  Leo: "fire",
+  Sagittarius: "fire",
+  Taurus: "earth",
+  Virgo: "earth",
+  Capricorn: "earth",
+  Gemini: "air",
+  Libra: "air",
+  Aquarius: "air",
+  Cancer: "water",
+  Scorpio: "water",
+  Pisces: "water",
+};
+
+const CHINESE_TRINES: Record<string, string> = {
+  Rat: "inventors",
+  Dragon: "inventors",
+  Monkey: "inventors",
+  Ox: "builders",
+  Snake: "builders",
+  Rooster: "builders",
+  Tiger: "rebels",
+  Horse: "rebels",
+  Dog: "rebels",
+  Rabbit: "heart",
+  Goat: "heart",
+  Pig: "heart",
+};
+
+const compareElements = (left?: string | null, right?: string | null): number => {
+  const a = ASTRO_SIGN_ELEMENT[String(left || "")] || "";
+  const b = ASTRO_SIGN_ELEMENT[String(right || "")] || "";
+  if (!a || !b) return 0.58;
+  if (a === b) return 0.9;
+  if ((a === "fire" && b === "air") || (a === "air" && b === "fire")) return 0.82;
+  if ((a === "earth" && b === "water") || (a === "water" && b === "earth")) return 0.8;
+  return 0.52;
+};
+
+const compareExactOrNear = (left?: string | null, right?: string | null, same = 0.92, near = 0.64): number => {
+  const a = String(left || "").trim().toLowerCase();
+  const b = String(right || "").trim().toLowerCase();
+  if (!a || !b) return 0.58;
+  if (a === b) return same;
+  const aBits = a.split(/[\s/•-]+/).filter(Boolean);
+  const bBits = new Set(b.split(/[\s/•-]+/).filter(Boolean));
+  return aBits.some((part) => bBits.has(part)) ? near : 0.5;
+};
+
+const compareHumanDesignType = (left?: string | null, right?: string | null): number => {
+  const a = String(left || "").trim().toLowerCase();
+  const b = String(right || "").trim().toLowerCase();
+  if (!a || !b) return 0.6;
+  if (a === b) return 0.88;
+  if ((a.includes("generator") && b.includes("generator")) || (a.includes("projector") && b.includes("projector"))) {
+    return 0.8;
+  }
+  if (a.includes("reflector") || b.includes("reflector")) return 0.72;
+  return 0.62;
+};
+
+const compareChineseZodiac = (left?: string | null, right?: string | null): number => {
+  const a = String(left || "").trim();
+  const b = String(right || "").trim();
+  if (!a || !b) return 0.6;
+  if (a === b) return 0.86;
+  const trineA = CHINESE_TRINES[a];
+  const trineB = CHINESE_TRINES[b];
+  if (trineA && trineA === trineB) return 0.82;
+  return 0.55;
+};
+
+const scoreLabel = (score: number, locale: string, high: [string, string], mid: [string, string], low: [string, string]) => {
+  if (score >= 80) return localeText(locale, high[0], high[1]);
+  if (score >= 63) return localeText(locale, mid[0], mid[1]);
+  return localeText(locale, low[0], low[1]);
+};
+
+const buildCompatibilityReport = (selfInsights: any, friendInsights: any, locale: string) => {
+  const selfSummary = selfInsights?.summary_json || {};
+  const friendSummary = friendInsights?.summary_json || {};
+  const emotional = Math.round(
+    ((compareElements(selfSummary?.astrology?.moon, friendSummary?.astrology?.moon) +
+      compareExactOrNear(selfSummary?.human_design?.authority, friendSummary?.human_design?.authority, 0.9, 0.7)) /
+      2) *
+      100
+  );
+  const attraction = Math.round(
+    ((compareElements(selfSummary?.astrology?.sun, friendSummary?.astrology?.sun) +
+      compareElements(selfSummary?.astrology?.ascendant, friendSummary?.astrology?.ascendant)) /
+      2) *
+      100
+  );
+  const rhythm = Math.round(
+    ((compareHumanDesignType(selfSummary?.human_design?.type, friendSummary?.human_design?.type) +
+      compareChineseZodiac(selfSummary?.chinese_zodiac, friendSummary?.chinese_zodiac)) /
+      2) *
+      100
+  );
+  const direction = Math.round(
+    ((compareExactOrNear(selfSummary?.human_design?.profile, friendSummary?.human_design?.profile, 0.86, 0.72) +
+      compareExactOrNear(selfSummary?.human_design?.strategy, friendSummary?.human_design?.strategy, 0.8, 0.66)) /
+      2) *
+      100
+  );
+  const overall = Math.round(emotional * 0.3 + attraction * 0.25 + rhythm * 0.25 + direction * 0.2);
+  return {
+    overall,
+    band: scoreLabel(
+      overall,
+      locale,
+      ["Stark kemi", "Strong chemistry"],
+      ["Lovande dynamik", "Promising dynamic"],
+      ["Blandad men möjlig", "Mixed but workable"]
+    ),
+    summary:
+      overall >= 80
+        ? localeText(
+            locale,
+            "Ni verkar mötas naturligt i både känsla och tempo. Det finns stark grund för en varm, levande relation.",
+            "You seem to meet each other naturally in both feeling and pace. There is a strong base for a warm, alive connection."
+          )
+        : overall >= 63
+          ? localeText(
+              locale,
+              "Ni har flera tydliga träffpunkter men också olika rytmer som kräver kommunikation. Det här kan bli väldigt bra om ni är raka med behov och förväntningar.",
+              "You have several clear points of connection, but also different rhythms that need communication. This can become very good if you are honest about needs and expectations."
+            )
+          : localeText(
+              locale,
+              "Ni kan absolut fungera ihop, men relationen behöver mer tålamod och tydligare avstämningar för att kännas stabil.",
+              "You can absolutely work together, but the relationship needs more patience and clearer check-ins to feel stable."
+            ),
+    dimensions: [
+      {
+        key: "emotional",
+        label: localeText(locale, "Känslorytm", "Emotional rhythm"),
+        score: emotional,
+        note: scoreLabel(
+          emotional,
+          locale,
+          ["Ni landar mjukt i varandras känslolägen.", "You settle smoothly into each other's emotional weather."],
+          ["Känslorna går att möta, men ni behöver översätta dem ibland.", "Your feelings can meet, but sometimes need translation."],
+          ["Här behövs varsamhet för att inte missa varandras behov.", "This area needs care so you do not miss each other's needs."]
+        ),
+      },
+      {
+        key: "attraction",
+        label: localeText(locale, "Dragning", "Attraction"),
+        score: attraction,
+        note: scoreLabel(
+          attraction,
+          locale,
+          ["Det finns en tydlig magnetism och lätt igenkänning.", "There is a clear magnetism and easy recognition."],
+          ["Ni triggar intresse, men inte alltid på samma sätt.", "You spark interest, though not always in the same way."],
+          ["Här behöver ni hitta ert eget språk för kemi och stil.", "This area needs a more deliberate shared language for chemistry and style."]
+        ),
+      },
+      {
+        key: "rhythm",
+        label: localeText(locale, "Rytm", "Rhythm"),
+        score: rhythm,
+        note: scoreLabel(
+          rhythm,
+          locale,
+          ["Era vardagsrytmer verkar stötta varandra väl.", "Your everyday rhythms seem to support each other well."],
+          ["Ni kan samsas, men tempo och social energi skiftar.", "You can sync up, though pace and social energy differ."],
+          ["Det krävs mer planering för att vardagen ska flyta.", "This area needs more planning for daily life to flow."]
+        ),
+      },
+      {
+        key: "direction",
+        label: localeText(locale, "Riktning", "Direction"),
+        score: direction,
+        note: scoreLabel(
+          direction,
+          locale,
+          ["Ni verkar fatta beslut på kompatibla sätt.", "You seem to make decisions in compatible ways."],
+          ["Ni når fram, men olika processer behöver respekt.", "You can get there, but different processes need respect."],
+          ["Beslut och nästa steg kan lätt kännas osynkade.", "Decisions and next steps can easily feel out of sync."]
+        ),
+      },
+    ],
+  };
 };
 
 const extractOpenAiText = (payload: any): string => {
@@ -1001,6 +1392,488 @@ const server = http.createServer((req, res) => {
       });
     return;
   }
+  if (req.url === "/api/membership" && req.method === "GET") {
+    const authHeaders = getAuthentikHeaders(req.headers as Record<string, unknown>);
+    const userId = authHeaders["x-authentik-uid"] ?? null;
+    if (!userId) {
+      res.writeHead(401, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: false, error: "unauthorized" }));
+      return;
+    }
+    (async () => {
+      try {
+        const membership = await syncMembershipIdentity(userId, authHeaders);
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            ok: true,
+            membership,
+            paywall: { aiUnlocked: membershipHasAiAccess(membership) },
+          })
+        );
+      } catch (err) {
+        res.writeHead(500, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: "membership_fetch_failed", details: String(err) }));
+      }
+    })();
+    return;
+  }
+  if (req.url === "/api/membership/redeem" && req.method === "POST") {
+    const locale = getRequestLocale(req);
+    const authHeaders = getAuthentikHeaders(req.headers as Record<string, unknown>);
+    const userId = authHeaders["x-authentik-uid"] ?? null;
+    if (!userId) {
+      res.writeHead(401, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: false, error: "unauthorized", message: apiErrorMessage("unauthorized", locale) }));
+      return;
+    }
+    (async () => {
+      try {
+        await syncMembershipIdentity(userId, authHeaders);
+        const currentMembership = await getMembershipRow(userId);
+        if (membershipHasAiAccess(currentMembership)) {
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: true, membership: currentMembership, alreadyActive: true }));
+          return;
+        }
+        const body = await parseJsonBody(req);
+        const code = normalizeMembershipCode(body?.code);
+        if (!code) {
+          res.writeHead(400, { "content-type": "application/json" });
+          res.end(
+            JSON.stringify({
+              ok: false,
+              error: "membership_code_invalid",
+              message: apiErrorMessage("membership_code_invalid", locale),
+            })
+          );
+          return;
+        }
+        const updatedCode = await pool.query(
+          `UPDATE membership_registration_codes
+           SET use_count = use_count + 1,
+               updated_at = NOW()
+           WHERE code = $1
+             AND active = TRUE
+             AND (expires_at IS NULL OR expires_at > NOW())
+             AND (max_uses IS NULL OR use_count < max_uses)
+           RETURNING code, grants_tier, grants_ai`,
+          [code]
+        );
+        if (!updatedCode.rowCount) {
+          res.writeHead(400, { "content-type": "application/json" });
+          res.end(
+            JSON.stringify({
+              ok: false,
+              error: "membership_code_invalid",
+              message: apiErrorMessage("membership_code_invalid", locale),
+            })
+          );
+          return;
+        }
+        const granted = updatedCode.rows[0];
+        await pool.query(
+          `INSERT INTO user_memberships (user_id, username, display_name, email, active, tier, ai_access, registration_code, joined_at)
+           SELECT user_id, username, display_name, email, TRUE, $2, $3, $4, NOW()
+           FROM user_memberships
+           WHERE user_id = $1
+           ON CONFLICT (user_id)
+           DO UPDATE SET
+             active = TRUE,
+             tier = EXCLUDED.tier,
+             ai_access = EXCLUDED.ai_access,
+             registration_code = EXCLUDED.registration_code,
+             joined_at = COALESCE(user_memberships.joined_at, NOW()),
+             updated_at = NOW()`,
+          [userId, granted.grants_tier || "member", Boolean(granted.grants_ai), code]
+        );
+        const membership = await getMembershipRow(userId);
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true, membership, redeemed: code }));
+      } catch (err) {
+        res.writeHead(500, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: "membership_redeem_failed", details: String(err) }));
+      }
+    })();
+    return;
+  }
+  if (req.url === "/api/friends" && req.method === "GET") {
+    const locale = getRequestLocale(req);
+    const authHeaders = getAuthentikHeaders(req.headers as Record<string, unknown>);
+    const userId = authHeaders["x-authentik-uid"] ?? null;
+    if (!userId) {
+      res.writeHead(401, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: false, error: "unauthorized", message: apiErrorMessage("unauthorized", locale) }));
+      return;
+    }
+    (async () => {
+      try {
+        await syncMembershipIdentity(userId, authHeaders);
+        const membership = await getMembershipRow(userId);
+        if (!membership?.active) {
+          res.writeHead(402, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: "membership_required", message: apiErrorMessage("membership_required", locale) }));
+          return;
+        }
+        const result = await pool.query(
+          `SELECT
+             CASE WHEN f.requester_id = $1 THEN f.addressee_id ELSE f.requester_id END AS user_id,
+             CASE
+               WHEN f.status = 'accepted' THEN 'accepted'
+               WHEN f.requester_id = $1 THEN 'outgoing'
+               ELSE 'incoming'
+             END AS direction,
+             f.status,
+             f.created_at,
+             f.responded_at,
+             um.username,
+             um.display_name,
+             um.active,
+             um.tier,
+             um.ai_access
+           FROM user_friendships f
+           JOIN user_memberships um
+             ON um.user_id = CASE WHEN f.requester_id = $1 THEN f.addressee_id ELSE f.requester_id END
+           WHERE f.requester_id = $1 OR f.addressee_id = $1
+           ORDER BY COALESCE(f.responded_at, f.created_at) DESC`,
+          [userId]
+        );
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            ok: true,
+            friends: {
+              accepted: result.rows.filter((row) => row.status === "accepted"),
+              incoming: result.rows.filter((row) => row.status === "pending" && row.direction === "incoming"),
+              outgoing: result.rows.filter((row) => row.status === "pending" && row.direction === "outgoing"),
+            },
+          })
+        );
+      } catch (err) {
+        res.writeHead(500, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: "friends_fetch_failed", details: String(err) }));
+      }
+    })();
+    return;
+  }
+  if (req.url?.startsWith("/api/friends/search") && req.method === "GET") {
+    const locale = getRequestLocale(req);
+    const authHeaders = getAuthentikHeaders(req.headers as Record<string, unknown>);
+    const userId = authHeaders["x-authentik-uid"] ?? null;
+    if (!userId) {
+      res.writeHead(401, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: false, error: "unauthorized", message: apiErrorMessage("unauthorized", locale) }));
+      return;
+    }
+    (async () => {
+      try {
+        await syncMembershipIdentity(userId, authHeaders);
+        const membership = await getMembershipRow(userId);
+        if (!membership?.active) {
+          res.writeHead(402, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: "membership_required", message: apiErrorMessage("membership_required", locale) }));
+          return;
+        }
+        const requestUrl = new URL(req.url || "/", "http://localhost");
+        const q = String(requestUrl.searchParams.get("q") || "").trim();
+        if (q.length < 2) {
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: true, results: [] }));
+          return;
+        }
+        const result = await pool.query(
+          `SELECT
+             um.user_id,
+             um.username,
+             um.display_name,
+             CASE
+               WHEN f.status = 'accepted' THEN 'accepted'
+               WHEN f.requester_id = $1 THEN 'outgoing'
+               WHEN f.addressee_id = $1 THEN 'incoming'
+               ELSE 'none'
+             END AS relation
+           FROM user_memberships um
+           LEFT JOIN user_friendships f
+             ON (
+               (f.requester_id = $1 AND f.addressee_id = um.user_id)
+               OR
+               (f.requester_id = um.user_id AND f.addressee_id = $1)
+             )
+           WHERE um.user_id <> $1
+             AND um.active = TRUE
+             AND (
+               COALESCE(um.username, '') ILIKE $2
+               OR
+               COALESCE(um.display_name, '') ILIKE $2
+               OR
+               um.user_id ILIKE $2
+             )
+           ORDER BY COALESCE(um.display_name, um.username, um.user_id)
+           LIMIT 10`,
+          [userId, `%${q}%`]
+        );
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true, results: result.rows }));
+      } catch (err) {
+        res.writeHead(500, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: "friends_search_failed", details: String(err) }));
+      }
+    })();
+    return;
+  }
+  if (req.url === "/api/friends/request" && req.method === "POST") {
+    const locale = getRequestLocale(req);
+    const authHeaders = getAuthentikHeaders(req.headers as Record<string, unknown>);
+    const userId = authHeaders["x-authentik-uid"] ?? null;
+    if (!userId) {
+      res.writeHead(401, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: false, error: "unauthorized", message: apiErrorMessage("unauthorized", locale) }));
+      return;
+    }
+    (async () => {
+      try {
+        await syncMembershipIdentity(userId, authHeaders);
+        const membership = await getMembershipRow(userId);
+        if (!membership?.active) {
+          res.writeHead(402, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: "membership_required", message: apiErrorMessage("membership_required", locale) }));
+          return;
+        }
+        const body = await parseJsonBody(req);
+        const targetUserId = String(body?.targetUserId || "").trim();
+        if (!targetUserId || targetUserId === userId) {
+          res.writeHead(400, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: "invalid_target" }));
+          return;
+        }
+        const targetMembership = await getMembershipRow(targetUserId);
+        if (!targetMembership?.active) {
+          res.writeHead(404, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: "target_missing" }));
+          return;
+        }
+        if (await areAcceptedFriends(userId, targetUserId)) {
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: true, status: "accepted" }));
+          return;
+        }
+        const reversed = await pool.query(
+          `UPDATE user_friendships
+           SET status = 'accepted',
+               responded_at = NOW(),
+               updated_at = NOW()
+           WHERE requester_id = $1
+             AND addressee_id = $2
+             AND status = 'pending'
+           RETURNING requester_id`,
+          [targetUserId, userId]
+        );
+        if (reversed.rowCount) {
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: true, status: "accepted" }));
+          return;
+        }
+        const existingPending = await pool.query(
+          `SELECT 1
+           FROM user_friendships
+           WHERE requester_id = $1
+             AND addressee_id = $2
+             AND status = 'pending'`,
+          [userId, targetUserId]
+        );
+        if (existingPending.rowCount) {
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: true, status: "pending" }));
+          return;
+        }
+        await pool.query(
+          `INSERT INTO user_friendships (requester_id, addressee_id, status)
+           VALUES ($1, $2, 'pending')
+           ON CONFLICT (requester_id, addressee_id)
+           DO UPDATE SET
+             status = 'pending',
+             responded_at = NULL,
+             updated_at = NOW()`,
+          [userId, targetUserId]
+        );
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true, status: "pending" }));
+      } catch (err) {
+        res.writeHead(500, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: "friend_request_failed", details: String(err) }));
+      }
+    })();
+    return;
+  }
+  if (req.url === "/api/friends/respond" && req.method === "POST") {
+    const locale = getRequestLocale(req);
+    const authHeaders = getAuthentikHeaders(req.headers as Record<string, unknown>);
+    const userId = authHeaders["x-authentik-uid"] ?? null;
+    if (!userId) {
+      res.writeHead(401, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: false, error: "unauthorized", message: apiErrorMessage("unauthorized", locale) }));
+      return;
+    }
+    (async () => {
+      try {
+        await syncMembershipIdentity(userId, authHeaders);
+        const membership = await getMembershipRow(userId);
+        if (!membership?.active) {
+          res.writeHead(402, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: "membership_required", message: apiErrorMessage("membership_required", locale) }));
+          return;
+        }
+        const body = await parseJsonBody(req);
+        const requesterUserId = String(body?.requesterUserId || "").trim();
+        const action = String(body?.action || "").trim().toLowerCase();
+        if (!requesterUserId || (action !== "accept" && action !== "decline")) {
+          res.writeHead(400, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: "invalid_payload" }));
+          return;
+        }
+        const nextStatus = action === "accept" ? "accepted" : "declined";
+        const result = await pool.query(
+          `UPDATE user_friendships
+           SET status = $3,
+               responded_at = NOW(),
+               updated_at = NOW()
+           WHERE requester_id = $1
+             AND addressee_id = $2
+             AND status = 'pending'
+           RETURNING requester_id, addressee_id, status`,
+          [requesterUserId, userId, nextStatus]
+        );
+        if (!result.rowCount) {
+          res.writeHead(404, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: "friend_request_missing" }));
+          return;
+        }
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true, status: nextStatus }));
+      } catch (err) {
+        res.writeHead(500, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: "friend_respond_failed", details: String(err) }));
+      }
+    })();
+    return;
+  }
+  if (req.url === "/api/friends/remove" && req.method === "POST") {
+    const locale = getRequestLocale(req);
+    const authHeaders = getAuthentikHeaders(req.headers as Record<string, unknown>);
+    const userId = authHeaders["x-authentik-uid"] ?? null;
+    if (!userId) {
+      res.writeHead(401, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: false, error: "unauthorized", message: apiErrorMessage("unauthorized", locale) }));
+      return;
+    }
+    (async () => {
+      try {
+        await syncMembershipIdentity(userId, authHeaders);
+        const membership = await getMembershipRow(userId);
+        if (!membership?.active) {
+          res.writeHead(402, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: "membership_required", message: apiErrorMessage("membership_required", locale) }));
+          return;
+        }
+        const body = await parseJsonBody(req);
+        const targetUserId = String(body?.targetUserId || "").trim();
+        if (!targetUserId) {
+          res.writeHead(400, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: "invalid_target" }));
+          return;
+        }
+        await pool.query(
+          `DELETE FROM user_friendships
+           WHERE (requester_id = $1 AND addressee_id = $2)
+              OR (requester_id = $2 AND addressee_id = $1)`,
+          [userId, targetUserId]
+        );
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (err) {
+        res.writeHead(500, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: "friend_remove_failed", details: String(err) }));
+      }
+    })();
+    return;
+  }
+  if (req.url?.startsWith("/api/friends/compatibility/") && req.method === "GET") {
+    const locale = getRequestLocale(req);
+    const authHeaders = getAuthentikHeaders(req.headers as Record<string, unknown>);
+    const userId = authHeaders["x-authentik-uid"] ?? null;
+    if (!userId) {
+      res.writeHead(401, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: false, error: "unauthorized", message: apiErrorMessage("unauthorized", locale) }));
+      return;
+    }
+    (async () => {
+      try {
+        await syncMembershipIdentity(userId, authHeaders);
+        const membership = await getMembershipRow(userId);
+        if (!membership?.active) {
+          res.writeHead(402, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: "membership_required", message: apiErrorMessage("membership_required", locale) }));
+          return;
+        }
+        const parts = req.url!.split("/").filter(Boolean);
+        const targetUserId = parts[parts.length - 1];
+        if (!targetUserId) {
+          res.writeHead(400, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: "missing_user_id" }));
+          return;
+        }
+        if (!(await areAcceptedFriends(userId, targetUserId))) {
+          res.writeHead(403, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: "friendship_required", message: apiErrorMessage("friendship_required", locale) }));
+          return;
+        }
+        const [selfInsightsRes, targetInsightsRes, targetMembershipRes] = await Promise.all([
+          pool.query(
+            `SELECT insight_id, summary_json, astrology_json, human_design_json, created_at
+             FROM profile_insights
+             WHERE user_id = $1
+             ORDER BY created_at DESC
+             LIMIT 1`,
+            [userId]
+          ),
+          pool.query(
+            `SELECT insight_id, summary_json, astrology_json, human_design_json, created_at
+             FROM profile_insights
+             WHERE user_id = $1
+             ORDER BY created_at DESC
+             LIMIT 1`,
+            [targetUserId]
+          ),
+          pool.query(
+            `SELECT user_id, username, display_name, tier, ai_access
+             FROM user_memberships
+             WHERE user_id = $1`,
+            [targetUserId]
+          ),
+        ]);
+        if (!selfInsightsRes.rowCount || !targetInsightsRes.rowCount) {
+          res.writeHead(400, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: "profile_required", message: apiErrorMessage("profile_required", locale) }));
+          return;
+        }
+        const report = buildCompatibilityReport(selfInsightsRes.rows[0], targetInsightsRes.rows[0], locale);
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            ok: true,
+            compatibility: {
+              ...report,
+              friend: targetMembershipRes.rowCount ? targetMembershipRes.rows[0] : { user_id: targetUserId },
+            },
+          })
+        );
+      } catch (err) {
+        res.writeHead(500, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: "compatibility_failed", details: String(err) }));
+      }
+    })();
+    return;
+  }
   if (req.url?.startsWith("/api/profile/avatar") && req.method === "GET") {
     const authHeaders = getAuthentikHeaders(req.headers as Record<string, unknown>);
     const userId = authHeaders["x-authentik-uid"] ?? null;
@@ -1055,6 +1928,20 @@ const server = http.createServer((req, res) => {
         const requestedStyle = String(body?.style || "plain")
           .trim()
           .toLowerCase();
+        if (styleLooksLikeGta(requestedStyle)) {
+          const membership = await getMembershipRow(userId);
+          if (!membershipHasAiAccess(membership)) {
+            res.writeHead(402, { "content-type": "application/json" });
+            res.end(
+              JSON.stringify({
+                ok: false,
+                error: "membership_required",
+                message: apiErrorMessage("membership_required", getRequestLocale(req)),
+              })
+            );
+            return;
+          }
+        }
         if (!imageDataUrl) {
           res.writeHead(400, { "content-type": "application/json" });
           res.end(JSON.stringify({ ok: false, error: "missing_image" }));
@@ -1118,7 +2005,7 @@ const server = http.createServer((req, res) => {
       res.end(JSON.stringify({ ok: true, results: [] }));
       return;
     }
-    const ua = (process.env.PLACES_USER_AGENT || "chkn-dev/1.0").trim();
+    const ua = (process.env.PLACES_USER_AGENT || "chkn/1.0").trim();
     fetch(
       `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=6&q=${encodeURIComponent(q)}`,
       {
@@ -1265,8 +2152,20 @@ const server = http.createServer((req, res) => {
       res.end(JSON.stringify({ ok: false, error: "unauthorized", message: apiErrorMessage("unauthorized", locale) }));
       return;
     }
-    parseJsonBody(req)
-      .then(async (body) => {
+    (async () => {
+      const membership = await getMembershipRow(userId);
+      if (!membershipHasAiAccess(membership)) {
+        res.writeHead(402, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            ok: false,
+            error: "membership_required",
+            message: apiErrorMessage("membership_required", locale),
+          })
+        );
+        return;
+      }
+      const body = await parseJsonBody(req);
         const language = String(body?.language || "").trim() || "en-US";
         const spreadLabel =
           String(body?.spreadLabel || "").trim() ||
@@ -1339,19 +2238,18 @@ const server = http.createServer((req, res) => {
         }
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ ok: true, reply }));
-      })
-      .catch((err) => {
-        const locale = getRequestLocale(req);
-        res.writeHead(500, { "content-type": "application/json" });
-        res.end(
-          JSON.stringify({
-            ok: false,
-            error: "oracle_failed",
-            message: apiErrorMessage("oracle_failed", locale),
-            details: String(err),
-          })
-        );
-      });
+    })().catch((err) => {
+      const locale = getRequestLocale(req);
+      res.writeHead(500, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          ok: false,
+          error: "oracle_failed",
+          message: apiErrorMessage("oracle_failed", locale),
+          details: String(err),
+        })
+      );
+    });
     return;
   }
   if (req.url?.startsWith("/api/profile/tarot/daily") && req.method === "GET") {
@@ -1444,6 +2342,7 @@ const server = http.createServer((req, res) => {
   }
   if (req.url?.startsWith("/api/profile/insights/") && req.method === "GET") {
     const authUserId = getUserIdFromReq(req);
+    const locale = getRequestLocale(req);
     if (!authUserId) {
       res.writeHead(401, { "content-type": "application/json" });
       res.end(JSON.stringify({ ok: false, error: "unauthorized" }));
@@ -1456,28 +2355,32 @@ const server = http.createServer((req, res) => {
       res.end(JSON.stringify({ ok: false, error: "missing_user_id" }));
       return;
     }
-    pool
-      .query(
+    (async () => {
+      if (!(await canAccessProfilePayload(authUserId, requestedId))) {
+        res.writeHead(403, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: "friendship_required", message: apiErrorMessage("friendship_required", locale) }));
+        return;
+      }
+      const result = await pool.query(
         `SELECT insight_id, summary_json, astrology_json, human_design_json, created_at
          FROM profile_insights
          WHERE user_id = $1
          ORDER BY created_at DESC
          LIMIT 1`,
         [requestedId]
-      )
-      .then((result) => {
-        const row = result.rowCount ? result.rows[0] : null;
-        res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({ ok: true, insights: row }));
-      })
-      .catch((err) => {
-        res.writeHead(500, { "content-type": "application/json" });
-        res.end(JSON.stringify({ ok: false, error: "db_error", details: String(err) }));
-      });
+      );
+      const row = result.rowCount ? result.rows[0] : null;
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: true, insights: row }));
+    })().catch((err) => {
+      res.writeHead(500, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: false, error: "db_error", details: String(err) }));
+    });
     return;
   }
   if (req.url?.startsWith("/api/profile/") && req.method === "GET") {
     const authUserId = getUserIdFromReq(req);
+    const locale = getRequestLocale(req);
     if (!authUserId) {
       res.writeHead(401, { "content-type": "application/json" });
       res.end(JSON.stringify({ ok: false, error: "unauthorized" }));
@@ -1490,22 +2393,25 @@ const server = http.createServer((req, res) => {
       res.end(JSON.stringify({ ok: false, error: "missing_user_id" }));
       return;
     }
-    pool
-      .query(
+    (async () => {
+      if (!(await canAccessProfilePayload(authUserId, requestedId))) {
+        res.writeHead(403, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: "friendship_required", message: apiErrorMessage("friendship_required", locale) }));
+        return;
+      }
+      const result = await pool.query(
         `SELECT user_id, birth_date::text as birth_date, birth_time::text as birth_time, unknown_time, birth_place, birth_lat, birth_lng, tz_name, tz_offset_minutes
          FROM user_profiles
          WHERE user_id = $1`,
         [requestedId]
-      )
-      .then((result) => {
-        const row = result.rowCount ? result.rows[0] : null;
-        res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({ ok: true, profile: row }));
-      })
-      .catch((err) => {
-        res.writeHead(500, { "content-type": "application/json" });
-        res.end(JSON.stringify({ ok: false, error: "db_error", details: String(err) }));
-      });
+      );
+      const row = result.rowCount ? result.rows[0] : null;
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: true, profile: row }));
+    })().catch((err) => {
+      res.writeHead(500, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: false, error: "db_error", details: String(err) }));
+    });
     return;
   }
   if (req.url === "/api/profile/insights/calc" && req.method === "POST") {

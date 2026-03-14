@@ -6,6 +6,6 @@ export default defineConfig({
   server: {
     host: true,
     port: 5173,
-    allowedHosts: ["chkn-dev.sputnet.world", "chkn.sputnet.world", "chkn.veloklang.se"],
+    allowedHosts: ["chkn.sputnet.world", "chkn.veloklang.se"],
   },
 });
