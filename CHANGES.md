@@ -16,6 +16,7 @@ Updated: 2026-03-14
 - Added a membership and friends section on the profile page.
 - Added registration-code redemption UI.
 - Added member search, incoming/outgoing request handling, accepted friends, and compatibility modal access.
+- Expanded the compatibility reading into astrology-based areas such as identities, emotions, communication, love, responsibility, sex/aggression, philosophies of life, work points, and easy flow.
 - Added clear paywall messaging for locked AI features in tarot and avatar flows.
 - Added styling for the new membership and social UI blocks.
 

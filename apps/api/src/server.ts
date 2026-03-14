@@ -1183,7 +1183,7 @@ const buildCompatibilityReport = (selfInsights: any, friendInsights: any, locale
     band: scoreLabel(
       overall,
       locale,
-      ["Stark kemi", "Strong chemistry"],
+      ["Stark kompatibilitet", "Strong compatibility"],
       ["Lovande dynamik", "Promising dynamic"],
       ["Blandad men möjlig", "Mixed but workable"]
     ),

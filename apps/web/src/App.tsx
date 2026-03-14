@@ -3849,9 +3849,9 @@ export default function App() {
             (dimension) =>
               `${dimension.label}: ${dimension.score}/100\n${dimension.note}`
           ),
-        ].join("\n");
+        ].join("\n\n");
         openModal(
-          tr("Hur ni funkar ihop", "How you work together"),
+          tr("Horoskopjämförelse", "Compatibility reading"),
           body,
           `${friendLabel(compatibility.friend)} · ${compatibility.band} · ${compatibility.overall}/100`,
           undefined,
@@ -5894,8 +5894,8 @@ export default function App() {
 
               <p className="summary-detail">
                 {tr(
-                  "Bjud in andra medlemmar, acceptera förfrågningar och se hur ni fungerar ihop när ni blivit vänner.",
-                  "Invite other members, accept requests, and see how you work together once you become friends."
+                  "Bjud in andra medlemmar, acceptera förfrågningar och öppna en horoskopjämförelse när ni blivit vänner.",
+                  "Invite other members, accept requests, and open a compatibility reading once you become friends."
                 )}
               </p>
 
@@ -5953,7 +5953,7 @@ export default function App() {
                                 >
                                   {friendCompatibilityLoadingId === friend.user_id
                                     ? tr("Laddar...", "Loading...")
-                                    : tr("Se matchning", "See match")}
+                                    : tr("Horoskopjämförelse", "Compatibility reading")}
                                 </button>
                               ) : friend.relation === "incoming" ? (
                                 <>
@@ -6003,7 +6003,7 @@ export default function App() {
                                 >
                                   {friendCompatibilityLoadingId === friend.user_id
                                     ? tr("Laddar...", "Loading...")
-                                    : tr("Hur ni funkar ihop", "How you match")}
+                                    : tr("Horoskopjämförelse", "Compatibility reading")}
                                 </button>
                                 <button className="btn-ghost" type="button" onClick={() => void removeFriend(friend.user_id)}>
                                   {tr("Ta bort", "Remove")}
