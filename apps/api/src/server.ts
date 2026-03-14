@@ -930,6 +930,27 @@ const compareChineseZodiac = (left?: string | null, right?: string | null): numb
   return 0.55;
 };
 
+const averageCompatibility = (...scores: number[]): number => {
+  const valid = scores.filter((score) => Number.isFinite(score));
+  if (!valid.length) return 0.58;
+  return valid.reduce((sum, score) => sum + score, 0) / valid.length;
+};
+
+const scoreToPercent = (score: number): number => Math.max(0, Math.min(100, Math.round(score * 100)));
+
+const getPlanetSign = (insightsRow: any, planetName: string): string | null => {
+  const summary = insightsRow?.summary_json || {};
+  if (planetName === "Sun") return summary?.astrology?.sun ?? null;
+  if (planetName === "Moon") return summary?.astrology?.moon ?? null;
+  if (planetName === "Ascendant") return summary?.astrology?.ascendant ?? null;
+  const planets = Array.isArray(insightsRow?.astrology_json?.planets) ? insightsRow.astrology_json.planets : [];
+  const match = planets.find((planet: any) => String(planet?.name || "").trim().toLowerCase() === planetName.toLowerCase());
+  return typeof match?.sign === "string" && match.sign.trim() ? match.sign.trim() : null;
+};
+
+const compareSignPlacement = (left?: string | null, right?: string | null, same = 0.92, near = 0.68): number =>
+  averageCompatibility(compareExactOrNear(left, right, same, near), compareElements(left, right));
+
 const scoreLabel = (score: number, locale: string, high: [string, string], mid: [string, string], low: [string, string]) => {
   if (score >= 80) return localeText(locale, high[0], high[1]);
   if (score >= 63) return localeText(locale, mid[0], mid[1]);
@@ -939,31 +960,224 @@ const scoreLabel = (score: number, locale: string, high: [string, string], mid: 
 const buildCompatibilityReport = (selfInsights: any, friendInsights: any, locale: string) => {
   const selfSummary = selfInsights?.summary_json || {};
   const friendSummary = friendInsights?.summary_json || {};
-  const emotional = Math.round(
-    ((compareElements(selfSummary?.astrology?.moon, friendSummary?.astrology?.moon) +
-      compareExactOrNear(selfSummary?.human_design?.authority, friendSummary?.human_design?.authority, 0.9, 0.7)) /
-      2) *
-      100
+  const basicIdentities = scoreToPercent(
+    averageCompatibility(
+      compareSignPlacement(getPlanetSign(selfInsights, "Sun"), getPlanetSign(friendInsights, "Sun"), 0.94, 0.72),
+      compareSignPlacement(getPlanetSign(selfInsights, "Ascendant"), getPlanetSign(friendInsights, "Ascendant"), 0.88, 0.68),
+      compareHumanDesignType(selfSummary?.human_design?.type, friendSummary?.human_design?.type),
+      compareChineseZodiac(selfSummary?.chinese_zodiac, friendSummary?.chinese_zodiac)
+    )
   );
-  const attraction = Math.round(
-    ((compareElements(selfSummary?.astrology?.sun, friendSummary?.astrology?.sun) +
-      compareElements(selfSummary?.astrology?.ascendant, friendSummary?.astrology?.ascendant)) /
-      2) *
-      100
+  const moodsAndEmotions = scoreToPercent(
+    averageCompatibility(
+      compareSignPlacement(getPlanetSign(selfInsights, "Moon"), getPlanetSign(friendInsights, "Moon"), 0.94, 0.72),
+      compareExactOrNear(selfSummary?.human_design?.authority, friendSummary?.human_design?.authority, 0.9, 0.72)
+    )
   );
-  const rhythm = Math.round(
-    ((compareHumanDesignType(selfSummary?.human_design?.type, friendSummary?.human_design?.type) +
-      compareChineseZodiac(selfSummary?.chinese_zodiac, friendSummary?.chinese_zodiac)) /
-      2) *
-      100
+  const intellectAndCommunication = scoreToPercent(
+    averageCompatibility(
+      compareSignPlacement(getPlanetSign(selfInsights, "Mercury"), getPlanetSign(friendInsights, "Mercury"), 0.95, 0.74),
+      compareExactOrNear(selfSummary?.human_design?.strategy, friendSummary?.human_design?.strategy, 0.82, 0.68)
+    )
   );
-  const direction = Math.round(
-    ((compareExactOrNear(selfSummary?.human_design?.profile, friendSummary?.human_design?.profile, 0.86, 0.72) +
-      compareExactOrNear(selfSummary?.human_design?.strategy, friendSummary?.human_design?.strategy, 0.8, 0.66)) /
-      2) *
-      100
+  const loveAndPleasure = scoreToPercent(
+    averageCompatibility(
+      compareSignPlacement(getPlanetSign(selfInsights, "Venus"), getPlanetSign(friendInsights, "Venus"), 0.95, 0.74),
+      compareSignPlacement(getPlanetSign(selfInsights, "Moon"), getPlanetSign(friendInsights, "Moon"), 0.9, 0.7)
+    )
   );
-  const overall = Math.round(emotional * 0.3 + attraction * 0.25 + rhythm * 0.25 + direction * 0.2);
+  const responsibility = scoreToPercent(
+    averageCompatibility(
+      compareSignPlacement(getPlanetSign(selfInsights, "Saturn"), getPlanetSign(friendInsights, "Saturn"), 0.9, 0.68),
+      compareExactOrNear(selfSummary?.human_design?.profile, friendSummary?.human_design?.profile, 0.86, 0.72),
+      compareExactOrNear(selfSummary?.human_design?.strategy, friendSummary?.human_design?.strategy, 0.78, 0.64)
+    )
+  );
+  const sexAndAggression = scoreToPercent(
+    averageCompatibility(
+      compareSignPlacement(getPlanetSign(selfInsights, "Mars"), getPlanetSign(friendInsights, "Mars"), 0.93, 0.7),
+      compareSignPlacement(getPlanetSign(selfInsights, "Ascendant"), getPlanetSign(friendInsights, "Ascendant"), 0.86, 0.66),
+      compareHumanDesignType(selfSummary?.human_design?.type, friendSummary?.human_design?.type)
+    )
+  );
+  const philosophiesOfLife = scoreToPercent(
+    averageCompatibility(
+      compareSignPlacement(getPlanetSign(selfInsights, "Jupiter"), getPlanetSign(friendInsights, "Jupiter"), 0.9, 0.72),
+      compareSignPlacement(getPlanetSign(selfInsights, "Sun"), getPlanetSign(friendInsights, "Sun"), 0.86, 0.68),
+      compareChineseZodiac(selfSummary?.chinese_zodiac, friendSummary?.chinese_zodiac)
+    )
+  );
+
+  const coreDimensions = [
+    {
+      key: "basic_identities",
+      label: localeText(locale, "Grundidentiteter", "Basic identities"),
+      focus: localeText(locale, "grundidentiteter", "basic identities"),
+      score: basicIdentities,
+      note: scoreLabel(
+        basicIdentities,
+        locale,
+        [
+          "Era grundidentiteter och sociala uttryck känns ovanligt lätta att känna igen hos varandra.",
+          "Your core identities and social expression feel unusually easy to recognize in each other.",
+        ],
+        [
+          "Ni kan förstå varandras grundenergi, men ni visar er på olika sätt.",
+          "You can understand each other's core energy, though you express it differently.",
+        ],
+        [
+          "Självbild och första intryck kan skava tills ni lärt er läsa varandra bättre.",
+          "Self-image and first impressions may rub until you learn to read each other better.",
+        ]
+      ),
+    },
+    {
+      key: "moods_emotions",
+      label: localeText(locale, "Humör & känslor", "Moods & emotions"),
+      focus: localeText(locale, "humör och känslor", "moods and emotions"),
+      score: moodsAndEmotions,
+      note: scoreLabel(
+        moodsAndEmotions,
+        locale,
+        [
+          "Era känslolägen verkar ganska lätta att möta och reglera tillsammans.",
+          "Your emotional weather seems fairly easy to meet and regulate together.",
+        ],
+        [
+          "Ni kan förstå varandra emotionellt, men ni lugnar inte alltid systemet på samma sätt.",
+          "You can understand each other emotionally, but you do not always regulate in the same way.",
+        ],
+        [
+          "Här behövs extra varsamhet så att känslor inte feltolkas eller lämnas ensamma.",
+          "This area needs extra care so feelings are not misread or left alone.",
+        ]
+      ),
+    },
+    {
+      key: "intellect_communication",
+      label: localeText(locale, "Intellekt & kommunikation", "Intellect & communication"),
+      focus: localeText(locale, "intellekt och kommunikation", "intellect and communication"),
+      score: intellectAndCommunication,
+      note: scoreLabel(
+        intellectAndCommunication,
+        locale,
+        [
+          "Ni snappar snabbt hur den andra tänker och det är lätt att få fart i samtal.",
+          "You grasp how the other thinks quickly, and conversation gets moving easily.",
+        ],
+        [
+          "Samtalen kan bli bra, men ni behöver ibland olika tempo för att tänka klart.",
+          "Conversation can be good, but you sometimes need different pace to think clearly.",
+        ],
+        [
+          "Här kan missförstånd byggas upp snabbare, så tydlighet och timing blir viktigt.",
+          "Misunderstandings can build faster here, so clarity and timing become important.",
+        ]
+      ),
+    },
+    {
+      key: "love_pleasure",
+      label: localeText(locale, "Kärlek & njutning", "Love & pleasure"),
+      focus: localeText(locale, "kärlek och njutning", "love and pleasure"),
+      score: loveAndPleasure,
+      note: scoreLabel(
+        loveAndPleasure,
+        locale,
+        [
+          "Det finns lätthet i vad ni tycker om, hur ni flirtar och vad som känns njutbart.",
+          "There is ease in what you enjoy, how you flirt, and what feels pleasurable.",
+        ],
+        [
+          "Attraktion finns, men smak och rytm behöver ibland översättas.",
+          "There is attraction, but taste and rhythm sometimes need translation.",
+        ],
+        [
+          "Njutning och tillgivenhet behöver mer aktiv finjustering för att landa rätt.",
+          "Pleasure and affection need more active fine-tuning to land well.",
+        ]
+      ),
+    },
+    {
+      key: "responsibility",
+      label: localeText(locale, "Ansvarskänsla", "Sense of responsibility"),
+      focus: localeText(locale, "ansvarskänsla", "sense of responsibility"),
+      score: responsibility,
+      note: scoreLabel(
+        responsibility,
+        locale,
+        [
+          "Ni verkar ta ansvar på sätt som kan stötta en stabil vardag tillsammans.",
+          "You seem to carry responsibility in ways that can support a stable daily life together.",
+        ],
+        [
+          "Ni kan bygga något hållbart, men ansvar fördelas inte automatiskt likadant.",
+          "You can build something lasting, though responsibility is not distributed the same way automatically.",
+        ],
+        [
+          "Förväntningar, plikt och långsiktighet måste uttalas tydligt för att inte skava.",
+          "Expectations, duty, and long-term responsibility need to be spoken clearly to avoid friction.",
+        ]
+      ),
+    },
+    {
+      key: "sex_aggression",
+      label: localeText(locale, "Sex & aggression", "Sex & aggression"),
+      focus: localeText(locale, "sex och aggression", "sex and aggression"),
+      score: sexAndAggression,
+      note: scoreLabel(
+        sexAndAggression,
+        locale,
+        [
+          "Driv, lust och konfliktsvar kan hitta en levande men begriplig rytm.",
+          "Drive, desire, and conflict responses can find a vivid but understandable rhythm.",
+        ],
+        [
+          "Det finns kemi, men också olika sätt att ta initiativ eller reagera under press.",
+          "There is chemistry, but also different ways of taking initiative or reacting under pressure.",
+        ],
+        [
+          "Tempo, irritation och begär kan haka i varandra om ni inte pratar tydligt om det.",
+          "Tempo, irritation, and desire can snag on each other if you do not talk about them clearly.",
+        ]
+      ),
+    },
+    {
+      key: "philosophies_of_life",
+      label: localeText(locale, "Livsfilosofier", "Philosophies of life"),
+      focus: localeText(locale, "livsfilosofier", "philosophies of life"),
+      score: philosophiesOfLife,
+      note: scoreLabel(
+        philosophiesOfLife,
+        locale,
+        [
+          "Ni verkar dela en ganska kompatibel känsla för mening, tro och riktning i livet.",
+          "You seem to share a fairly compatible sense of meaning, belief, and direction in life.",
+        ],
+        [
+          "Ni kan inspirera varandra, men ni utgår inte alltid från samma världsbild.",
+          "You can inspire each other, though you do not always begin from the same worldview.",
+        ],
+        [
+          "Här behöver ni ge extra plats åt olika livssyner, annars blir avståndet tydligt.",
+          "This area needs extra room for different life views, otherwise distance becomes obvious.",
+        ]
+      ),
+    },
+  ];
+
+  const weakestDimension = coreDimensions.reduce((lowest, next) => (next.score < lowest.score ? next : lowest));
+  const strongestDimension = coreDimensions.reduce((highest, next) => (next.score > highest.score ? next : highest));
+  const workOn = Math.max(0, Math.min(100, 100 - weakestDimension.score));
+  const easy = strongestDimension.score;
+  const overall = Math.round(
+    basicIdentities * 0.16 +
+      moodsAndEmotions * 0.16 +
+      intellectAndCommunication * 0.14 +
+      loveAndPleasure * 0.16 +
+      responsibility * 0.12 +
+      sexAndAggression * 0.12 +
+      philosophiesOfLife * 0.14
+  );
   return {
     overall,
     band: scoreLabel(
@@ -977,68 +1191,67 @@ const buildCompatibilityReport = (selfInsights: any, friendInsights: any, locale
       overall >= 80
         ? localeText(
             locale,
-            "Ni verkar mötas naturligt i både känsla och tempo. Det finns stark grund för en varm, levande relation.",
-            "You seem to meet each other naturally in both feeling and pace. There is a strong base for a warm, alive connection."
+            `Ni har mycket som flyter naturligt, särskilt inom ${strongestDimension.focus}. Er viktigaste medvetna punkt blir ${weakestDimension.focus}.`,
+            `A lot seems to flow naturally between you, especially around ${strongestDimension.focus}. Your biggest conscious growth point looks like ${weakestDimension.focus}.`
           )
         : overall >= 63
           ? localeText(
               locale,
-              "Ni har flera tydliga träffpunkter men också olika rytmer som kräver kommunikation. Det här kan bli väldigt bra om ni är raka med behov och förväntningar.",
-              "You have several clear points of connection, but also different rhythms that need communication. This can become very good if you are honest about needs and expectations."
+              `Ni har flera tydliga träffpunkter, och det som ser lättast ut just nu är ${strongestDimension.focus}. Mest medvetenhet behövs kring ${weakestDimension.focus}.`,
+              `You have several clear points of connection, and ${strongestDimension.focus} looks easiest right now. The most conscious work is likely needed around ${weakestDimension.focus}.`
             )
           : localeText(
               locale,
-              "Ni kan absolut fungera ihop, men relationen behöver mer tålamod och tydligare avstämningar för att kännas stabil.",
-              "You can absolutely work together, but the relationship needs more patience and clearer check-ins to feel stable."
+              `Ni kan absolut fungera ihop, men det kräver mer tålamod kring ${weakestDimension.focus}. Det som ändå kan bära er är styrkan i ${strongestDimension.focus}.`,
+              `You can absolutely work together, but it will take more patience around ${weakestDimension.focus}. What can still carry you is the strength in ${strongestDimension.focus}.`
             ),
     dimensions: [
+      ...coreDimensions.map(({ key, label, score, note }) => ({ key, label, score, note })),
       {
-        key: "emotional",
-        label: localeText(locale, "Känslorytm", "Emotional rhythm"),
-        score: emotional,
-        note: scoreLabel(
-          emotional,
-          locale,
-          ["Ni landar mjukt i varandras känslolägen.", "You settle smoothly into each other's emotional weather."],
-          ["Känslorna går att möta, men ni behöver översätta dem ibland.", "Your feelings can meet, but sometimes need translation."],
-          ["Här behövs varsamhet för att inte missa varandras behov.", "This area needs care so you do not miss each other's needs."]
-        ),
+        key: "work_on",
+        label: localeText(locale, "Det ni behöver jobba på", "What you will have to work on"),
+        score: workOn,
+        note:
+          workOn >= 70
+            ? localeText(
+                locale,
+                `Ert största utvecklingsområde ser ut att ligga i ${weakestDimension.focus}. Här krävs tydlighet, tålamod och återkommande avstämningar.`,
+                `Your biggest growth area seems to sit in ${weakestDimension.focus}. This will require clarity, patience, and recurring check-ins.`
+              )
+            : workOn >= 40
+              ? localeText(
+                  locale,
+                  `Mest medvetenhet behövs kring ${weakestDimension.focus}. Det är inte ett stopp, men det behöver aktiv omsorg.`,
+                  `The most awareness is needed around ${weakestDimension.focus}. It is not a dead end, but it does need active care.`
+                )
+              : localeText(
+                  locale,
+                  `Det finns något att vårda i ${weakestDimension.focus}, men inget som ser ovanligt tungt ut just nu.`,
+                  `There is something to tend in ${weakestDimension.focus}, but nothing unusually heavy there right now.`
+                ),
       },
       {
-        key: "attraction",
-        label: localeText(locale, "Dragning", "Attraction"),
-        score: attraction,
-        note: scoreLabel(
-          attraction,
-          locale,
-          ["Det finns en tydlig magnetism och lätt igenkänning.", "There is a clear magnetism and easy recognition."],
-          ["Ni triggar intresse, men inte alltid på samma sätt.", "You spark interest, though not always in the same way."],
-          ["Här behöver ni hitta ert eget språk för kemi och stil.", "This area needs a more deliberate shared language for chemistry and style."]
-        ),
-      },
-      {
-        key: "rhythm",
-        label: localeText(locale, "Rytm", "Rhythm"),
-        score: rhythm,
-        note: scoreLabel(
-          rhythm,
-          locale,
-          ["Era vardagsrytmer verkar stötta varandra väl.", "Your everyday rhythms seem to support each other well."],
-          ["Ni kan samsas, men tempo och social energi skiftar.", "You can sync up, though pace and social energy differ."],
-          ["Det krävs mer planering för att vardagen ska flyta.", "This area needs more planning for daily life to flow."]
-        ),
-      },
-      {
-        key: "direction",
-        label: localeText(locale, "Riktning", "Direction"),
-        score: direction,
-        note: scoreLabel(
-          direction,
-          locale,
-          ["Ni verkar fatta beslut på kompatibla sätt.", "You seem to make decisions in compatible ways."],
-          ["Ni når fram, men olika processer behöver respekt.", "You can get there, but different processes need respect."],
-          ["Beslut och nästa steg kan lätt kännas osynkade.", "Decisions and next steps can easily feel out of sync."]
-        ),
+        key: "easy",
+        label: localeText(locale, "Det som kommer lätt", "What will be easy"),
+        score: easy,
+        note:
+          easy >= 80
+            ? localeText(
+                locale,
+                `Det mest självgående området mellan er verkar vara ${strongestDimension.focus}. Där finns naturligt flyt och snabb igenkänning.`,
+                `The most self-running area between you seems to be ${strongestDimension.focus}. There is natural flow and quick recognition there.`
+              )
+            : easy >= 63
+              ? localeText(
+                  locale,
+                  `Det som troligen känns lättast mellan er är ${strongestDimension.focus}. Det kan bli er tryggaste grund att bygga från.`,
+                  `What will likely feel easiest between you is ${strongestDimension.focus}. That can become your safest base to build from.`
+                )
+              : localeText(
+                  locale,
+                  `Inget område sticker ut som helt friktionsfritt ännu, men ${strongestDimension.focus} ser ändå mest lovande ut.`,
+                  `No area stands out as entirely friction-free yet, but ${strongestDimension.focus} still looks the most promising.`
+                ),
       },
     ],
   };
