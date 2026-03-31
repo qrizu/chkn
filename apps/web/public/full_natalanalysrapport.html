@@ -20,6 +20,7 @@
       --plum: #59334d;
       --shadow: 0 24px 70px rgba(8, 11, 22, 0.22);
       --radius: 22px;
+      --hd-bodychart-url: url("human-design-bodychart-556x928.png");
     }
 
     * {
@@ -277,6 +278,136 @@
       background: rgba(29, 38, 50, 0.07);
       border: 1px solid rgba(29, 38, 50, 0.2);
       color: #283240;
+    }
+
+    .btn[disabled] {
+      cursor: wait;
+      opacity: 0.72;
+      transform: none;
+      filter: none;
+    }
+
+    body.modal-open {
+      overflow: hidden;
+    }
+
+    .report-email-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(10, 13, 20, 0.58);
+      backdrop-filter: blur(8px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      z-index: 90;
+    }
+
+    .report-email-backdrop.open {
+      display: flex;
+    }
+
+    .report-email-modal {
+      width: min(520px, 100%);
+      border-radius: 22px;
+      border: 1px solid rgba(255, 255, 255, 0.55);
+      background: linear-gradient(165deg, #fffaf1 0%, #f6edde 52%, #efe5d6 100%);
+      box-shadow: 0 26px 80px rgba(9, 11, 18, 0.28);
+      padding: 18px;
+      display: grid;
+      gap: 14px;
+      color: #1d2632;
+    }
+
+    .report-email-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: flex-start;
+    }
+
+    .report-email-head h3 {
+      margin: 0;
+      font-family: "Fraunces", serif;
+      font-size: 1.5rem;
+      line-height: 1.08;
+    }
+
+    .report-email-head p {
+      margin: 6px 0 0;
+      color: #536072;
+      line-height: 1.55;
+      font-size: 0.95rem;
+    }
+
+    .report-email-close {
+      border: 0;
+      width: 38px;
+      height: 38px;
+      border-radius: 999px;
+      background: rgba(29, 38, 50, 0.08);
+      color: #253040;
+      font-size: 1.2rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .report-email-form {
+      display: grid;
+      gap: 12px;
+    }
+
+    .report-email-field {
+      display: grid;
+      gap: 6px;
+    }
+
+    .report-email-field label {
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #665f51;
+      font-weight: 800;
+    }
+
+    .report-email-field input {
+      width: 100%;
+      border-radius: 14px;
+      border: 1px solid rgba(29, 38, 50, 0.16);
+      background: rgba(255, 255, 255, 0.88);
+      padding: 12px 14px;
+      color: #1d2632;
+      font: inherit;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+    }
+
+    .report-email-note {
+      margin: 0;
+      color: #556072;
+      font-size: 0.92rem;
+      line-height: 1.55;
+    }
+
+    .report-email-status {
+      min-height: 1.25rem;
+      margin: 0;
+      font-size: 0.92rem;
+      font-weight: 700;
+    }
+
+    .report-email-status.ok {
+      color: #0f7f67;
+    }
+
+    .report-email-status.bad {
+      color: #b03b2f;
+    }
+
+    .report-email-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      flex-wrap: wrap;
     }
 
     .sheet-head {
@@ -762,17 +893,26 @@
     .hd-bodygraph-wrap {
       border: 1px solid rgba(89, 51, 77, 0.2);
       border-radius: 12px;
-      background: linear-gradient(160deg, rgba(255, 255, 255, 0.9), rgba(248, 239, 227, 0.75));
+      background-image:
+        linear-gradient(160deg, rgba(255, 255, 255, 0.86), rgba(248, 239, 227, 0.66)),
+        var(--hd-bodychart-url);
+      background-size: auto, contain;
+      background-position: center, center;
+      background-repeat: no-repeat, no-repeat;
       padding: 8px;
       min-height: 320px;
       display: grid;
       place-items: center;
+      position: relative;
+      overflow: hidden;
     }
 
     .hd-bodygraph-svg {
       width: 100%;
       max-width: 360px;
       height: auto;
+      position: relative;
+      z-index: 1;
     }
 
     .hd-bars {
@@ -860,7 +1000,7 @@
       aspect-ratio: 556 / 928;
       border: 1px solid rgba(89, 51, 77, 0.22);
       border-radius: 10px;
-      background-image: url("/human-design-bodychart-556x928.png");
+      background-image: var(--hd-bodychart-url);
       background-size: cover;
       background-position: center;
       background-repeat: no-repeat;
@@ -1250,7 +1390,9 @@
 
       .hd-bodygraph-wrap {
         border-color: rgba(255, 255, 255, 0.2);
-        background: linear-gradient(160deg, rgba(18, 16, 27, 0.92), rgba(12, 11, 18, 0.9));
+        background-image:
+          linear-gradient(160deg, rgba(18, 16, 27, 0.74), rgba(12, 11, 18, 0.78)),
+          var(--hd-bodychart-url);
       }
 
       .natal-wheel-stage {
@@ -1630,6 +1772,10 @@
         font-size: 10.8pt;
       }
 
+      .report-email-backdrop {
+        display: none !important;
+      }
+
       .page {
         width: 100%;
         max-width: none;
@@ -1858,7 +2004,9 @@
       .hd-bodygraph-wrap,
       .natal-wheel-stage {
         border-color: rgba(255, 255, 255, 0.2);
-        background: linear-gradient(160deg, rgba(18, 16, 27, 0.92), rgba(12, 11, 18, 0.9));
+        background-image:
+          linear-gradient(160deg, rgba(18, 16, 27, 0.74), rgba(12, 11, 18, 0.78)),
+          var(--hd-bodychart-url);
         min-height: 320px;
       }
 
@@ -2076,7 +2224,7 @@
           <img
             id="cover-avatar"
             class="cover-avatar"
-            src="/avatars/Default.jpg"
+            src="https://sputnet.world/avatars/Default.jpg"
             alt="Profilavatar"
             loading="lazy"
           />
@@ -2112,6 +2260,7 @@
 
       <div class="actions">
         <button class="btn primary" type="button" id="print-btn">Skriv ut / Spara PDF</button>
+        <button class="btn ghost" type="button" id="email-btn">E-posta full rapport</button>
         <button class="btn ghost" type="button" id="close-btn">Stäng</button>
       </div>
     </section>
@@ -2392,16 +2541,61 @@
     </section>
   </main>
 
+  <div class="report-email-backdrop" id="report-email-backdrop" hidden>
+    <div class="report-email-modal" role="dialog" aria-modal="true" aria-labelledby="report-email-title">
+      <div class="report-email-head">
+        <div>
+          <h3 id="report-email-title">E-posta full natalanalysrapport</h3>
+          <p id="report-email-subtitle">Skicka den renderade rapporten som HTML med samma layout som sidan du tittar på.</p>
+        </div>
+        <button class="report-email-close" type="button" id="report-email-close" aria-label="Stäng">×</button>
+      </div>
+      <form class="report-email-form" id="report-email-form">
+        <div class="report-email-field">
+          <label for="report-email-to" id="report-email-to-label">Skicka till</label>
+          <input id="report-email-to" type="email" autocomplete="email" placeholder="name@example.com" />
+        </div>
+        <p class="report-email-note" id="report-email-note">Mejlet innehåller den renderade HTML-versionen av rapporten du har öppen just nu.</p>
+        <p class="report-email-status" id="report-email-status" aria-live="polite"></p>
+        <div class="report-email-actions">
+          <button class="btn ghost" type="button" id="report-email-cancel">Avbryt</button>
+        <button class="btn primary" type="submit" id="report-email-send">Skicka full rapport</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script src="vendor/astrochart.js"></script>
   <script>
+    const SHARED_AVATAR_BASE = "https://sputnet.world/avatars";
+    const sharedAvatarUrl = (filename) => {
+      const clean = String(filename || "").replace(/^\/+/, "");
+      return clean ? `${SHARED_AVATAR_BASE}/${clean}` : SHARED_AVATAR_BASE;
+    };
+    const normalizeAvatarUrl = (value) => {
+      const raw = String(value || "").trim();
+      if (!raw) return "";
+      if (raw.startsWith("/avatars/")) {
+        return sharedAvatarUrl(raw.slice("/avatars/".length));
+      }
+      return raw;
+    };
+    const isPreferredAvatarCandidate = (value) => {
+      const raw = normalizeAvatarUrl(value);
+      if (!raw) return false;
+      if (raw === sharedAvatarUrl("Default.jpg")) return true;
+      if (raw.startsWith("data:image/")) return true;
+      return /\/api\/profile\/avatar(?:[/?#]|$)/.test(raw);
+    };
+
     const fallbackData = {
       locale: "sv-SE",
       generatedAt: new Date().toISOString(),
       user: {
         name: "Sputnet User",
         username: "user",
-        avatarUrl: "/avatars/Default.jpg",
-        avatarCandidates: ["/avatars/Default.jpg"],
+        avatarUrl: sharedAvatarUrl("Default.jpg"),
+        avatarCandidates: [sharedAvatarUrl("Default.jpg")],
         birthDate: null,
         birthTime: null,
         birthPlace: null,
@@ -3005,6 +3199,51 @@
         hour: "2-digit",
         minute: "2-digit",
       });
+    };
+
+    const buildReportHash = (printMode) => {
+      const nextParams = new URLSearchParams(hashRaw);
+      if (printMode) {
+        nextParams.set("print", "1");
+      } else {
+        nextParams.delete("print");
+      }
+      return nextParams.toString();
+    };
+
+    const buildReportUrl = (printMode) => {
+      const url = new URL(window.location.href);
+      const nextHash = buildReportHash(printMode);
+      url.hash = nextHash ? `#${nextHash}` : "";
+      return url.toString();
+    };
+
+    const detectAppBase = (pathname) => {
+      const cleanPath = String(pathname || "/");
+      if (cleanPath === "/stardom" || cleanPath.startsWith("/stardom/")) return "/stardom";
+      if (cleanPath === "/chickenrace" || cleanPath.startsWith("/chickenrace/")) return "/chickenrace";
+      if (cleanPath === "/chicken" || cleanPath.startsWith("/chicken/")) return "/chicken";
+      if (cleanPath === "/chkn" || cleanPath.startsWith("/chkn/")) return "/chkn";
+      return "";
+    };
+
+    const detectDefaultAppBaseForHost = () => {
+      const host = String(window.location.hostname || "").toLowerCase();
+      if (host === "sputnet.world" || host === "www.sputnet.world") return "/stardom";
+      return "";
+    };
+
+    const getReportEmailApiUrl = () => {
+      const pathBase = detectAppBase(window.location.pathname || "/");
+      let refBase = "";
+      try {
+        const refPath = new URL(document.referrer || "", window.location.origin).pathname || "/";
+        refBase = detectAppBase(refPath);
+      } catch {
+        refBase = "";
+      }
+      const appBase = pathBase || refBase || detectDefaultAppBaseForHost();
+      return new URL(`${appBase}/api/profile/report-email`, window.location.origin).toString();
     };
 
     const rawText = (value) => {
@@ -3906,15 +4145,15 @@
     const ensureAvatar = () => {
       const img = document.getElementById("cover-avatar");
       if (!img) return;
-      const rawCandidates = Array.isArray(data?.user?.avatarCandidates) ? data.user.avatarCandidates : [];
+      const rawCandidates = Array.isArray(data?.user?.avatarCandidates)
+        ? data.user.avatarCandidates
+            .map((candidate) => normalizeAvatarUrl(candidate))
+            .filter((candidate) => isPreferredAvatarCandidate(candidate))
+        : [];
       const fallbackCandidates = [
-        rawText(data?.user?.avatarUrl),
-        rawText(data?.user?.username) ? `/avatars/${rawText(data.user.username)}.jpg` : "",
-        rawText(data?.user?.username) ? `/avatars/${rawText(data.user.username).toLowerCase()}.jpg` : "",
-        rawText(data?.user?.name) ? `/avatars/${rawText(data.user.name)}.jpg` : "",
-        rawText(data?.user?.name) ? `/avatars/${rawText(data.user.name).toLowerCase()}.jpg` : "",
-        "/avatars/Default.jpg",
-      ];
+        normalizeAvatarUrl(rawText(data?.user?.avatarUrl)),
+        sharedAvatarUrl("Default.jpg"),
+      ].filter((candidate) => isPreferredAvatarCandidate(candidate));
       const queue = Array.from(new Set([...rawCandidates, ...fallbackCandidates].filter(Boolean)));
       let index = 0;
       const loadNext = () => {
@@ -5461,13 +5700,298 @@
       renderHdVisuals();
     };
 
+    const buildReportEmailSubject = () => {
+      const reportName = rawText(data?.user?.name || data?.user?.username || "");
+      return reportName
+        ? t(`Natalanalysrapport · ${reportName}`, `Natal Analysis Report · ${reportName}`)
+        : t("Natalanalysrapport", "Natal Analysis Report");
+    };
+
+    const buildReportEmailFilename = () => {
+      const reportName = rawText(data?.user?.name || data?.user?.username || "natalanalysrapport")
+        .toLowerCase()
+        .normalize("NFKD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 48) || "natalanalysrapport";
+      return `${reportName}-full-natalanalysrapport.html`;
+    };
+
+    const absolutizeAttribute = (node, attribute) => {
+      const current = node.getAttribute(attribute);
+      if (!current) return;
+      try {
+        node.setAttribute(attribute, new URL(current, window.location.href).toString());
+      } catch {
+        node.setAttribute(attribute, current);
+      }
+    };
+
+    const absolutizeUrl = (value) => {
+      const current = String(value || "").trim();
+      if (!current) return "";
+      try {
+        return new URL(current, window.location.href).toString();
+      } catch {
+        return current;
+      }
+    };
+
+    const shouldInlineAssetUrl = (value) => {
+      const current = String(value || "").trim();
+      if (!current) return false;
+      if (
+        current.startsWith("data:") ||
+        current.startsWith("blob:") ||
+        current.startsWith("#") ||
+        current.startsWith("mailto:")
+      ) {
+        return false;
+      }
+      try {
+        const resolved = new URL(current, window.location.href);
+        return resolved.origin === window.location.origin;
+      } catch {
+        return false;
+      }
+    };
+
+    const blobToDataUrl = (blob) =>
+      new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(reader.error || new Error("file_reader_failed"));
+        reader.readAsDataURL(blob);
+      });
+
+    const inlinedAssetCache = new Map();
+    const REPORT_EMAIL_INLINE_ASSET_MAX_BYTES = 250_000;
+    const REPORT_EMAIL_INLINE_TOTAL_MAX_BYTES = 900_000;
+    let inlinedAssetBytes = 0;
+
+    const slimReportEmailData = (source) => {
+      const src = source && typeof source === "object" ? source : {};
+      const planets = Array.isArray(src?.astrology?.planets) ? src.astrology.planets : [];
+      const aspects = Array.isArray(src?.astrology?.aspects) ? src.astrology.aspects : [];
+      return {
+        generatedAt: src?.generatedAt || null,
+        user: {
+          name: src?.user?.name || null,
+          username: src?.user?.username || null,
+          avatarUrl: src?.user?.avatarUrl || null,
+          birthDate: src?.user?.birthDate || null,
+          birthTime: src?.user?.birthTime || null,
+          birthPlace: src?.user?.birthPlace || null,
+        },
+        astrology: {
+          sun: src?.astrology?.sun || null,
+          moon: src?.astrology?.moon || null,
+          ascendant: src?.astrology?.ascendant || null,
+          planets: planets.slice(0, 10).map((planet) => ({
+            name: planet?.name || null,
+            sign: planet?.sign || null,
+            house: Number.isFinite(Number(planet?.house)) ? Number(planet.house) : null,
+            degree: planet?.degree || null,
+          })),
+          aspects: aspects.slice(0, 8).map((aspect) => ({
+            a: aspect?.a || null,
+            b: aspect?.b || null,
+            type: aspect?.type || null,
+            orb: Number.isFinite(Number(aspect?.orb)) ? Number(aspect.orb) : null,
+          })),
+        },
+        humanDesign: {
+          role: src?.humanDesign?.role || null,
+          type: src?.humanDesign?.type || null,
+          strategy: src?.humanDesign?.strategy || null,
+          authority: src?.humanDesign?.authority || null,
+          profile: src?.humanDesign?.profile || null,
+        },
+        chineseZodiac: {
+          element: src?.chineseZodiac?.element || null,
+          animal: src?.chineseZodiac?.animal || null,
+        },
+      };
+    };
+
+    const fetchAssetDataUrl = async (source) => {
+      const absoluteSource = absolutizeUrl(source);
+      if (!absoluteSource) return "";
+      if (inlinedAssetCache.has(absoluteSource)) {
+        return inlinedAssetCache.get(absoluteSource) || "";
+      }
+      try {
+        const response = await fetch(absoluteSource, { credentials: "include" });
+        if (!response.ok) {
+          inlinedAssetCache.set(absoluteSource, absoluteSource);
+          return absoluteSource;
+        }
+        const blob = await response.blob();
+        if (
+          blob.size > REPORT_EMAIL_INLINE_ASSET_MAX_BYTES ||
+          inlinedAssetBytes + blob.size > REPORT_EMAIL_INLINE_TOTAL_MAX_BYTES
+        ) {
+          inlinedAssetCache.set(absoluteSource, absoluteSource);
+          return absoluteSource;
+        }
+        const dataUrl = await blobToDataUrl(blob);
+        inlinedAssetBytes += blob.size;
+        inlinedAssetCache.set(absoluteSource, dataUrl || absoluteSource);
+        return inlinedAssetCache.get(absoluteSource) || "";
+      } catch {
+        inlinedAssetCache.set(absoluteSource, absoluteSource);
+        return absoluteSource;
+      }
+    };
+
+    const inlineClonedImages = async (clone) => {
+      const originalImages = [...document.querySelectorAll("img")];
+      const clonedImages = [...clone.querySelectorAll("img")];
+
+      await Promise.all(
+        clonedImages.map(async (clonedImage, index) => {
+          absolutizeAttribute(clonedImage, "src");
+          clonedImage.removeAttribute("srcset");
+          const originalImage = originalImages[index];
+          const source = String(
+            originalImage?.currentSrc || originalImage?.getAttribute("src") || clonedImage.getAttribute("src") || ""
+          ).trim();
+          if (!source || source.startsWith("data:")) {
+            if (source.startsWith("data:")) clonedImage.setAttribute("src", source);
+            return;
+          }
+          if (!shouldInlineAssetUrl(source)) {
+            absolutizeAttribute(clonedImage, "src");
+            return;
+          }
+          const dataUrl = await fetchAssetDataUrl(source);
+          if (dataUrl && dataUrl.startsWith("data:")) {
+            clonedImage.setAttribute("src", dataUrl);
+          } else {
+            absolutizeAttribute(clonedImage, "src");
+          }
+        })
+      );
+    };
+
+    const inlineClonedStyleAssets = async (clone) => {
+      const styleNodes = [...clone.querySelectorAll("style")];
+      await Promise.all(
+        styleNodes.map(async (styleNode) => {
+          let cssText = String(styleNode.textContent || "");
+          if (!cssText) return;
+          const matches = [...cssText.matchAll(/url\((['"]?)([^)"']+)\1\)/g)];
+          const rawUrls = Array.from(
+            new Set(
+              matches
+                .map((match) => String(match[2] || "").trim())
+                .filter((url) => shouldInlineAssetUrl(url))
+            )
+          );
+          for (const rawUrl of rawUrls) {
+            const dataUrl = await fetchAssetDataUrl(rawUrl);
+            if (!dataUrl || !dataUrl.startsWith("data:")) continue;
+            cssText = cssText.replace(
+              new RegExp(`url\\((['"]?)${escapeRegExp(rawUrl)}\\1\\)`, "g"),
+              `url("${dataUrl}")`
+            );
+          }
+          styleNode.textContent = cssText;
+        })
+      );
+    };
+
+    const buildRenderedReportEmailHtml = async () => {
+      inlinedAssetBytes = 0;
+      const clone = document.documentElement.cloneNode(true);
+      if (!clone || typeof clone.querySelectorAll !== "function") return "";
+
+      clone.classList.remove("modal-open");
+      clone.querySelectorAll("script").forEach((node) => node.remove());
+      clone.querySelectorAll(".actions").forEach((node) => node.remove());
+      const modal = clone.querySelector("#report-email-backdrop");
+      if (modal) modal.remove();
+      const clonedBody = clone.querySelector("body");
+      if (clonedBody) {
+        clonedBody.classList.remove("modal-open");
+        if (clonedBody.style) {
+          clonedBody.style.overflow = "";
+          clonedBody.style.height = "";
+          clonedBody.style.maxHeight = "";
+        }
+      }
+
+      clone.querySelectorAll("[src]").forEach((node) => absolutizeAttribute(node, "src"));
+      clone.querySelectorAll("link[href], a[href]").forEach((node) => absolutizeAttribute(node, "href"));
+      await inlineClonedImages(clone);
+      await inlineClonedStyleAssets(clone);
+
+      return `<!DOCTYPE html>\n${clone.outerHTML}`;
+    };
+
     const bindActions = () => {
       const printBtn = document.getElementById("print-btn");
+      const emailBtn = document.getElementById("email-btn");
       const closeBtn = document.getElementById("close-btn");
+      const backdrop = document.getElementById("report-email-backdrop");
+      const closeEmailBtn = document.getElementById("report-email-close");
+      const cancelEmailBtn = document.getElementById("report-email-cancel");
+      const emailForm = document.getElementById("report-email-form");
+      const emailInput = document.getElementById("report-email-to");
+      const emailSendBtn = document.getElementById("report-email-send");
+      const emailStatus = document.getElementById("report-email-status");
+
+      let reportEmailBusy = false;
+
+      const setEmailStatus = (message, kind) => {
+        if (!emailStatus) return;
+        emailStatus.textContent = message || "";
+        emailStatus.className = `report-email-status${kind ? ` ${kind}` : ""}`;
+      };
+
+      const setEmailBusy = (busy) => {
+        reportEmailBusy = !!busy;
+        if (emailInput) emailInput.disabled = reportEmailBusy;
+        if (emailSendBtn) {
+          emailSendBtn.disabled = reportEmailBusy;
+          emailSendBtn.textContent = reportEmailBusy
+            ? t("Skickar...", "Sending...")
+            : t("Skicka full rapport", "Send full report");
+        }
+        if (cancelEmailBtn) cancelEmailBtn.disabled = reportEmailBusy;
+        if (closeEmailBtn) closeEmailBtn.disabled = reportEmailBusy;
+      };
+
+      const closeEmailModal = () => {
+        if (reportEmailBusy || !backdrop) return;
+        backdrop.hidden = true;
+        backdrop.classList.remove("open");
+        document.body.classList.remove("modal-open");
+      };
+
+      const openEmailModal = () => {
+        if (!backdrop) return;
+        if (emailInput) {
+          emailInput.value = rawText(data?.user?.email || "");
+        }
+        setEmailStatus("", "");
+        backdrop.hidden = false;
+        backdrop.classList.add("open");
+        document.body.classList.add("modal-open");
+        setTimeout(() => {
+          if (emailInput) emailInput.focus();
+        }, 16);
+      };
 
       if (printBtn) {
         printBtn.textContent = t("Skriv ut / Spara PDF", "Print / Save PDF");
         printBtn.addEventListener("click", () => window.print());
+      }
+
+      if (emailBtn) {
+        emailBtn.textContent = t("E-posta full rapport", "Email full report");
+        emailBtn.addEventListener("click", openEmailModal);
       }
 
       if (closeBtn) {
@@ -5477,6 +6001,117 @@
             window.history.back();
           } else {
             window.close();
+          }
+        });
+      }
+
+      if (closeEmailBtn) {
+        closeEmailBtn.addEventListener("click", closeEmailModal);
+      }
+
+      if (cancelEmailBtn) {
+        cancelEmailBtn.textContent = t("Avbryt", "Cancel");
+        cancelEmailBtn.addEventListener("click", closeEmailModal);
+      }
+
+      if (emailInput) {
+        emailInput.placeholder = "name@example.com";
+      }
+
+      setText("report-email-title", t("E-posta full natalanalysrapport", "Email full natal analysis report"));
+      setText(
+        "report-email-subtitle",
+        t(
+          "Skicka en Gmail-säker preview i mejlet. Hela fullrapporten skickas som bifogad HTML-fil.",
+          "Send a Gmail-safe preview in the email. The complete report is attached as an HTML file."
+        )
+      );
+      setText("report-email-to-label", t("Skicka till", "Send to"));
+      setText(
+        "report-email-note",
+        t(
+          "Mejltexten visar sammanfattningens nyckeldelar. Resten finns i den bifogade fullrapporten.",
+          "The email body shows key summary sections. The rest is in the attached full report."
+        )
+      );
+
+      if (backdrop) {
+        backdrop.addEventListener("click", (event) => {
+          if (event.target === backdrop) closeEmailModal();
+        });
+      }
+
+      window.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") closeEmailModal();
+      });
+
+      if (emailForm) {
+        emailForm.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          const to = rawText(emailInput?.value || "");
+          if (!to) {
+            setEmailStatus(t("Ange en e-postadress.", "Enter an email address."), "bad");
+            return;
+          }
+
+          const reportHtml = await buildRenderedReportEmailHtml();
+          if (!reportHtml) {
+            setEmailStatus(
+              t("Kunde inte skapa rapportens HTML just nu.", "Could not build the report HTML right now."),
+              "bad"
+            );
+            return;
+          }
+
+          setEmailBusy(true);
+          setEmailStatus("", "");
+
+          try {
+            const basePayload = {
+              to,
+              locale,
+              reportData: slimReportEmailData(data),
+              reportUrl: buildReportUrl(false),
+              reportPrintUrl: buildReportUrl(true),
+              reportSubject: buildReportEmailSubject(),
+              reportHtmlFileName: buildReportEmailFilename(),
+            };
+
+            const response = await fetch(getReportEmailApiUrl(), {
+              method: "POST",
+              credentials: "include",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                ...basePayload,
+                reportHtml,
+              }),
+            });
+
+            const result = await response.json().catch(() => null);
+            if (!response.ok || !result?.ok) {
+              throw new Error(
+                String(
+                  result?.message ||
+                    t("Kunde inte skicka HTML-e-post just nu.", "Could not send the HTML email right now.")
+                )
+              );
+            }
+            setEmailStatus(
+              String(
+                result?.message ||
+                  t("Rapporten skickades.", "The report was sent.")
+              ),
+              "ok"
+            );
+          } catch (error) {
+            setEmailStatus(
+              error instanceof Error
+                ? error.message
+                : t("Kunde inte skicka HTML-e-post just nu.", "Could not send the HTML email right now."),
+              "bad"
+            );
+          } finally {
+            setEmailBusy(false);
           }
         });
       }

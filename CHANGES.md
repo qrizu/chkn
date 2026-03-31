@@ -17,6 +17,8 @@ Updated: 2026-03-14
 - Added registration-code redemption UI.
 - Added member search, incoming/outgoing request handling, accepted friends, and compatibility modal access.
 - Expanded the compatibility reading into astrology-based areas such as identities, emotions, communication, love, responsibility, sex/aggression, philosophies of life, work points, and easy flow.
+- Added a shared Yatzy-style top banner/header across CHKN pages, including lobby and non-game sections.
+- Added no-cache headers for the CHKN frontend dev server entrypoint to reduce stale bundles after deploys.
 - Added clear paywall messaging for locked AI features in tarot and avatar flows.
 - Added styling for the new membership and social UI blocks.
 

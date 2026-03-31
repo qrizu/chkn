@@ -27,9 +27,11 @@ type ProfilePayload = {
 };
 
 type UserInfo = {
+  user_id?: string | null;
   username?: string | null;
   email?: string | null;
   name?: string | null;
+  player_code?: string | null;
 };
 
 type MembershipPayload = {
@@ -60,10 +62,71 @@ type FriendRow = {
   ai_access?: boolean;
 };
 
+const SHARED_AVATAR_BASE = "https://sputnet.world/avatars";
+
+function sharedAvatarUrl(filename: string): string {
+  const clean = String(filename || "").replace(/^\/+/, "");
+  return clean ? `${SHARED_AVATAR_BASE}/${clean}` : SHARED_AVATAR_BASE;
+}
+
+function normalizeAppBase(value: string | undefined): string {
+  const cleaned = String(value || "").trim().replace(/^\/+|\/+$/g, "");
+  return cleaned ? `/${cleaned}` : "";
+}
+
+function detectAppBase(pathname: string, configuredBase: string | undefined): string {
+  const configured = normalizeAppBase(configuredBase);
+  if (configured) return configured;
+  if (pathname === "/stardom" || pathname.startsWith("/stardom/")) return "/stardom";
+  if (pathname === "/chickenrace" || pathname.startsWith("/chickenrace/")) return "/chickenrace";
+  if (pathname === "/chicken" || pathname.startsWith("/chicken/")) return "/chicken";
+  if (pathname === "/chkn" || pathname.startsWith("/chkn/")) return "/chkn";
+  return "";
+}
+
+function stripAppBase(pathname: string, appBase: string): string {
+  if (!appBase) return pathname || "/";
+  if (pathname === appBase) return "/";
+  if (pathname.startsWith(`${appBase}/`)) return pathname.slice(appBase.length) || "/";
+  return pathname || "/";
+}
+
+function withAppBase(path: string, appBase: string): string {
+  if (!path) return appBase ? `${appBase}/` : "/";
+  if (/^[a-z][a-z0-9+.-]*:/i.test(path)) return path;
+  const normalized = path.startsWith("/") ? path : `/${path}`;
+  if (!appBase) return normalized;
+  if (normalized === "/") return `${appBase}/`;
+  if (normalized === appBase || normalized.startsWith(`${appBase}/`)) return normalized;
+  return `${appBase}${normalized}`;
+}
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 type FriendCompatibility = {
   overall: number;
   band: string;
   summary: string;
+  deep_dive?: {
+    rating: number;
+    intro: string;
+    outro: string;
+    guidance: string[];
+    sections: Array<{
+      key: string;
+      title: string;
+      score: number;
+      summary: string;
+      body: string;
+    }>;
+  };
   friend: {
     user_id: string;
     username?: string | null;
@@ -96,6 +159,17 @@ type ProfileInsights = {
   astrology_json: any;
   human_design_json: any;
   created_at: string;
+};
+
+type AppModal = {
+  title: string;
+  subtitle?: string;
+  body: string;
+  actions?: { label: string; href: string }[];
+  icon?: React.ReactNode;
+  imageUrl?: string;
+  imageAlt?: string;
+  compatibility?: FriendCompatibility | null;
 };
 
 type PlaceResult = {
@@ -712,6 +786,9 @@ export default function App() {
   const [profileError, setProfileError] = useState<string | null>(null);
   const [profileDirty, setProfileDirty] = useState(false);
   const [profileInfo, setProfileInfo] = useState<ProfilePayload | null>(null);
+  const [accountStatus, setAccountStatus] = useState<string | null>(null);
+  const [accountError, setAccountError] = useState<string | null>(null);
+  const [accountDirty, setAccountDirty] = useState(false);
   const [membership, setMembership] = useState<MembershipPayload | null>(null);
   const [membershipLoading, setMembershipLoading] = useState(true);
   const [membershipBusy, setMembershipBusy] = useState(false);
@@ -727,6 +804,9 @@ export default function App() {
   const [friendSearchQuery, setFriendSearchQuery] = useState("");
   const [friendSearchResults, setFriendSearchResults] = useState<FriendRow[]>([]);
   const [friendCompatibilityLoadingId, setFriendCompatibilityLoadingId] = useState<string | null>(null);
+  const [compatibilityEmailBusy, setCompatibilityEmailBusy] = useState(false);
+  const [compatibilityEmailStatus, setCompatibilityEmailStatus] = useState<string | null>(null);
+  const [compatibilityEmailError, setCompatibilityEmailError] = useState<string | null>(null);
   const [avatarVersion, setAvatarVersion] = useState<number>(() => Date.now());
   const [avatarUploadBusy, setAvatarUploadBusy] = useState(false);
   const [avatarUploadStatus, setAvatarUploadStatus] = useState<string | null>(null);
@@ -790,15 +870,7 @@ export default function App() {
     card: TarotReadingCard;
   } | null>(null);
   const [focusedReadingCardFlipped, setFocusedReadingCardFlipped] = useState(false);
-  const [modal, setModal] = useState<{
-    title: string;
-    subtitle?: string;
-    body: string;
-    actions?: { label: string; href: string }[];
-    icon?: React.ReactNode;
-    imageUrl?: string;
-    imageAlt?: string;
-  } | null>(null);
+  const [modal, setModal] = useState<AppModal | null>(null);
   const [mapLatLng, setMapLatLng] = useState<{ lat: number; lng: number } | null>(null);
   const [placeResults, setPlaceResults] = useState<PlaceResult[]>([]);
   const [placeLoading, setPlaceLoading] = useState(false);
@@ -824,27 +896,36 @@ export default function App() {
     birthLng: "",
   });
   const lastSavedRef = useRef<string>("");
+  const [accountForm, setAccountForm] = useState({
+    name: "",
+    username: "",
+    email: "",
+  });
+  const accountLastSavedRef = useRef<string>("");
   const hdCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const draftKey = "chkn.profileDraft";
-  const pathname = window.location.pathname;
+  const rawPathname = window.location.pathname || "/";
+  const appBasePath = detectAppBase(rawPathname, import.meta.env.VITE_APP_BASE);
+  const pathname = stripAppBase(rawPathname, appBasePath);
+  const appHref = (path: string) => withAppBase(path, appBasePath);
   const isProfilePage = pathname === "/" || pathname.startsWith("/profile");
   const isSettingsPage = pathname.startsWith("/settings") || pathname.startsWith("/background");
   const isHumanDesignPage = pathname.startsWith("/human-design");
   const isGamesPage = pathname.startsWith("/games") || pathname.startsWith("/lobby") || pathname.startsWith("/blackjack");
   const isTarotPage = pathname.startsWith("/tarot");
-  const ytzyBase = (import.meta.env.VITE_YTZY_URL || "https://ytzy.sputnet.world").trim();
+  const ytzyBase = (import.meta.env.VITE_YTZY_URL || "https://sputnet.world/yatzy").trim();
   const profileAvatarApiUrl = useMemo(() => {
     const base = (import.meta.env.VITE_API_URL || "").trim();
-    if (!base) return `${window.location.origin}/api/profile/avatar`;
+    if (!base) return `${window.location.origin}${appBasePath}/api/profile/avatar`;
     const clean = base.replace(/\/$/, "");
     return clean.endsWith("/api") ? `${clean}/profile/avatar` : `${clean}/api/profile/avatar`;
-  }, []);
+  }, [appBasePath]);
   const avatarUrl = useMemo(
     () => `${profileAvatarApiUrl}?v=${encodeURIComponent(String(avatarVersion))}`,
     [avatarVersion, profileAvatarApiUrl]
   );
   const hdPageUserId = isHumanDesignPage
-    ? window.location.pathname.replace("/human-design", "").replace(/^\/+/, "")
+    ? pathname.replace("/human-design", "").replace(/^\/+/, "")
     : "";
   const [showEditForm, setShowEditForm] = useState(false);
   const isSwedish = useMemo(() => isSwedishLocale(oracleLanguage), [oracleLanguage]);
@@ -1055,22 +1136,22 @@ export default function App() {
   );
   const tarotDailyUrl = useMemo(() => {
     const base = (import.meta.env.VITE_API_URL || "").trim();
-    if (!base) return `${window.location.origin}/api/profile/tarot/daily`;
+    if (!base) return `${window.location.origin}${appBasePath}/api/profile/tarot/daily`;
     const clean = base.replace(/\/$/, "");
     return clean.endsWith("/api") ? `${clean}/profile/tarot/daily` : `${clean}/api/profile/tarot/daily`;
-  }, []);
+  }, [appBasePath]);
   const tarotDeckUrl = useMemo(() => {
     const base = (import.meta.env.VITE_API_URL || "").trim();
-    if (!base) return `${window.location.origin}/api/tarot/major-arcana`;
+    if (!base) return `${window.location.origin}${appBasePath}/api/tarot/major-arcana`;
     const clean = base.replace(/\/$/, "");
     return clean.endsWith("/api") ? `${clean}/tarot/major-arcana` : `${clean}/api/tarot/major-arcana`;
-  }, []);
+  }, [appBasePath]);
   const tarotOracleUrl = useMemo(() => {
     const base = (import.meta.env.VITE_API_URL || "").trim();
-    if (!base) return `${window.location.origin}/api/tarot/oracle`;
+    if (!base) return `${window.location.origin}${appBasePath}/api/tarot/oracle`;
     const clean = base.replace(/\/$/, "");
     return clean.endsWith("/api") ? `${clean}/tarot/oracle` : `${clean}/api/tarot/oracle`;
-  }, []);
+  }, [appBasePath]);
   const tarotDailyRequestUrl = useMemo(() => {
     const query = `lang=${encodeURIComponent(oracleLanguage)}`;
     return tarotDailyUrl.includes("?") ? `${tarotDailyUrl}&${query}` : `${tarotDailyUrl}?${query}`;
@@ -1309,6 +1390,170 @@ export default function App() {
     imageAlt?: string
   ) => {
     setModal({ title, body, subtitle, actions, icon, imageUrl, imageAlt });
+  };
+
+  const formatCompatibilityHeadline = useCallback(
+    (compatibility: FriendCompatibility) => {
+      const rating = compatibility.deep_dive?.rating;
+      if (typeof rating === "number" && Number.isFinite(rating)) {
+        try {
+          const formatted = new Intl.NumberFormat(oracleLanguage || "sv-SE", {
+            minimumFractionDigits: 1,
+            maximumFractionDigits: 1,
+          }).format(rating / 10);
+          return `${formatted}/10`;
+        } catch {
+          return `${(rating / 10).toFixed(1)}/10`;
+        }
+      }
+      return `${compatibility.overall}/100`;
+    },
+    [oracleLanguage]
+  );
+
+  const renderModalContent = (activeModal: AppModal) => {
+    const compatibility = activeModal.compatibility;
+    const deepDive = compatibility?.deep_dive;
+    if (compatibility && deepDive) {
+      return (
+        <>
+          <section className="compatibility-hero">
+            <div className="compatibility-overall">
+              <span className="compatibility-overall__score">{formatCompatibilityHeadline(compatibility)}</span>
+              <span className="compatibility-overall__band">{compatibility.band}</span>
+            </div>
+            <p>{deepDive.intro}</p>
+          </section>
+
+          <section className="compatibility-mini-grid">
+            {compatibility.dimensions.map((dimension) => (
+              <article key={`compatibility-score-${dimension.key}`} className="compatibility-mini-card">
+                <div className="compatibility-mini-card__header">
+                  <strong>{dimension.label}</strong>
+                  <span>{dimension.score}/100</span>
+                </div>
+                <p>{dimension.note}</p>
+              </article>
+            ))}
+          </section>
+
+          <section className="compatibility-deep-sections">
+            {deepDive.sections.map((section) => (
+              <article key={`compatibility-deep-${section.key}`} className="compatibility-section-card">
+                <div className="compatibility-section-card__header">
+                  <h4>{section.title}</h4>
+                  <span>{section.score}/100</span>
+                </div>
+                <p className="compatibility-section-card__summary">{section.summary}</p>
+                {section.body
+                  .split(/\n\n+/)
+                  .map((paragraph) => paragraph.trim())
+                  .filter(Boolean)
+                  .map((paragraph, index) => (
+                    <p key={`compatibility-deep-${section.key}-${index}`}>{paragraph}</p>
+                  ))}
+              </article>
+            ))}
+          </section>
+
+          {deepDive.guidance?.length ? (
+            <section className="compatibility-guidance">
+              <h4>{tr("Det här behöver ni vara rädda om", "What you need to protect")}</h4>
+              <ul>
+                {deepDive.guidance.map((item, index) => (
+                  <li key={`compatibility-guidance-${index}`}>{item}</li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+
+          {deepDive.outro ? <p className="compatibility-outro">{deepDive.outro}</p> : null}
+          <section className="compatibility-email-card">
+            <div className="compatibility-email-card__text">
+              <strong>{tr("Skicka jämförelsen via e-post", "Send this reading by email")}</strong>
+              <p>
+                {compatibilityEmailRecipient
+                  ? tr(
+                      `Vi skickar den till ${compatibilityEmailRecipient}. Hela djupjämförelsen följer med som bifogad HTML.`,
+                      `We will send it to ${compatibilityEmailRecipient}. The full deep reading is attached as HTML.`
+                    )
+                  : tr(
+                      "Lägg till en e-postadress under Profil > Konto för att kunna skicka jämförelsen.",
+                      "Add an email address under Profile > Account to send this reading."
+                    )}
+              </p>
+            </div>
+            <div className="modal-actions">
+              <button
+                className="btn-ghost"
+                type="button"
+                onClick={() => void printCompatibilityReport(compatibility)}
+              >
+                {tr("Skriv ut / spara PDF", "Print / Save PDF")}
+              </button>
+              <button
+                className="btn-primary"
+                type="button"
+                onClick={() => void sendCompatibilityEmail(compatibility)}
+                disabled={compatibilityEmailBusy || !compatibilityEmailRecipient}
+              >
+                {compatibilityEmailBusy ? tr("Skickar...", "Sending...") : tr("Skicka till min e-post", "Send to my email")}
+              </button>
+              {activeModal.actions?.map((action) => (
+                <a
+                  key={action.href}
+                  className="btn-ghost"
+                  href={action.href}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {action.label}
+                </a>
+              ))}
+            </div>
+            {compatibilityEmailStatus || compatibilityEmailError ? (
+              <div className="modal-status-stack">
+                {compatibilityEmailStatus ? <span className="status ok">{compatibilityEmailStatus}</span> : null}
+                {compatibilityEmailError ? <span className="status bad">{compatibilityEmailError}</span> : null}
+              </div>
+            ) : null}
+          </section>
+          <p className="modal-note">{getModalCalcNote(activeModal.title)}</p>
+        </>
+      );
+    }
+
+    return (
+      <>
+        {activeModal.imageUrl ? (
+          <div className="modal-media">
+            <img
+              className="modal-image tarot-modal-image"
+              src={activeModal.imageUrl}
+              alt={activeModal.imageAlt || activeModal.title}
+              loading="lazy"
+            />
+          </div>
+        ) : null}
+        <p>{activeModal.body}</p>
+        <p className="modal-note">{getModalCalcNote(activeModal.title)}</p>
+        {activeModal.actions?.length ? (
+          <div className="modal-actions">
+            {activeModal.actions.map((action) => (
+              <a
+                key={action.href}
+                className="btn-ghost"
+                href={action.href}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {action.label}
+              </a>
+            ))}
+          </div>
+        ) : null}
+      </>
+    );
   };
 
   const openTarotCardModal = useCallback(() => {
@@ -3100,27 +3345,12 @@ export default function App() {
       superReportInsights?.human_design_json?.incarnationCross?.name ||
       null;
     const hdIncarnationCrossLabel = hdIncarnationCross ? localizeHumanDesignCross(hdIncarnationCross) : null;
-    const reportUsernameRaw =
-      superReportProfile?.username ??
-      profileInfo?.username ??
-      superReportProfile?.name ??
-      profileInfo?.name ??
-      "";
-    const reportUsername = String(reportUsernameRaw || "").trim();
-    const titleCaseUsername = reportUsername
-      ? `${reportUsername.charAt(0).toUpperCase()}${reportUsername.slice(1)}`
-      : "";
     const avatarCandidates = Array.from(
       new Set(
         [
           avatarUrl,
-          reportUsername ? `/avatars/${reportUsername}.jpg` : null,
-          reportUsername ? `/avatars/${reportUsername}.png` : null,
-          reportUsername ? `/avatars/${reportUsername.toLowerCase()}.jpg` : null,
-          reportUsername ? `/avatars/${reportUsername.toLowerCase()}.png` : null,
-          titleCaseUsername ? `/avatars/${titleCaseUsername}.jpg` : null,
-          titleCaseUsername ? `/avatars/${titleCaseUsername}.png` : null,
-          "/avatars/Default.jpg",
+          profileAvatarApiUrl,
+          sharedAvatarUrl("Default.jpg"),
         ].filter(Boolean) as string[]
       )
     );
@@ -3132,7 +3362,7 @@ export default function App() {
         name: superReportProfile?.name ?? superReportProfile?.username ?? null,
         username: superReportProfile?.username ?? null,
         email: superReportProfile?.email ?? null,
-        avatarUrl: avatarCandidates[0] ?? "/avatars/Default.jpg",
+        avatarUrl: avatarCandidates[0] ?? sharedAvatarUrl("Default.jpg"),
         avatarCandidates,
         birthDate: superReportProfile?.birth_date ?? profileForm.birthDate ?? null,
         birthTime: superReportProfile?.birth_time ?? profileForm.birthTime ?? null,
@@ -3229,14 +3459,16 @@ export default function App() {
     }
   }, [superReportData]);
 
-  const reportTemplateVersion = "2026-02-15-r22";
-  const superReportBase = `/full_natalanalysrapport.html?v=${encodeURIComponent(reportTemplateVersion)}`;
+  const reportTemplateVersion = "2026-03-22-r27";
+  const superReportBase = appHref(`/full_natalanalysrapport.html?v=${encodeURIComponent(reportTemplateVersion)}`);
   const superReportUrl = superReportHash
     ? `${superReportBase}#data=${superReportHash}`
     : superReportBase;
   const superReportPrintUrl = superReportHash
     ? `${superReportBase}#data=${superReportHash}&print=1`
     : `${superReportBase}#print=1`;
+  const superReportAbsoluteUrl = `${window.location.origin}${superReportUrl}`;
+  const superReportPrintAbsoluteUrl = `${window.location.origin}${superReportPrintUrl}`;
 
   const hdReportHash = useMemo(() => {
     try {
@@ -3246,7 +3478,7 @@ export default function App() {
     }
   }, [hdReportData]);
 
-  const hdReportBase = `/standalone-report.html?v=${encodeURIComponent(reportTemplateVersion)}`;
+  const hdReportBase = appHref(`/standalone-report.html?v=${encodeURIComponent(reportTemplateVersion)}`);
   const hdReportUrl = hdReportHash
     ? `${hdReportBase}#data=${hdReportHash}`
     : hdReportBase;
@@ -3403,92 +3635,108 @@ export default function App() {
 
   const profileUrl = useMemo(() => {
     const base = (import.meta.env.VITE_API_URL || "").trim();
-    if (!base) return `${window.location.origin}/api/profile`;
+    if (!base) return `${window.location.origin}${appBasePath}/api/profile`;
     const clean = base.replace(/\/$/, "");
     return clean.endsWith("/api") ? `${clean}/profile` : `${clean}/api/profile`;
-  }, []);
+  }, [appBasePath]);
+  const profileAccountUrl = useMemo(() => {
+    const base = (import.meta.env.VITE_API_URL || "").trim();
+    if (!base) return `${window.location.origin}${appBasePath}/api/profile/account`;
+    const clean = base.replace(/\/$/, "");
+    return clean.endsWith("/api") ? `${clean}/profile/account` : `${clean}/api/profile/account`;
+  }, [appBasePath]);
   const placesUrl = useMemo(() => {
     const base = (import.meta.env.VITE_API_URL || "").trim();
-    if (!base) return `${window.location.origin}/api/places`;
+    if (!base) return `${window.location.origin}${appBasePath}/api/places`;
     const clean = base.replace(/\/$/, "");
     return clean.endsWith("/api") ? `${clean}/places` : `${clean}/api/places`;
-  }, []);
+  }, [appBasePath]);
   const insightsUrl = useMemo(() => {
     const base = (import.meta.env.VITE_API_URL || "").trim();
-    if (!base) return `${window.location.origin}/api/profile/insights`;
+    if (!base) return `${window.location.origin}${appBasePath}/api/profile/insights`;
     const clean = base.replace(/\/$/, "");
     return clean.endsWith("/api") ? `${clean}/profile/insights` : `${clean}/api/profile/insights`;
-  }, []);
+  }, [appBasePath]);
   const insightsCalcUrl = useMemo(() => {
     const base = (import.meta.env.VITE_API_URL || "").trim();
-    if (!base) return `${window.location.origin}/api/profile/insights/calc`;
+    if (!base) return `${window.location.origin}${appBasePath}/api/profile/insights/calc`;
     const clean = base.replace(/\/$/, "");
     return clean.endsWith("/api") ? `${clean}/profile/insights/calc` : `${clean}/api/profile/insights/calc`;
-  }, []);
+  }, [appBasePath]);
   const insightsByUserUrl = useMemo(() => {
     const base = (import.meta.env.VITE_API_URL || "").trim();
-    if (!base) return `${window.location.origin}/api/profile/insights`;
+    if (!base) return `${window.location.origin}${appBasePath}/api/profile/insights`;
     const clean = base.replace(/\/$/, "");
     return clean.endsWith("/api") ? `${clean}/profile/insights` : `${clean}/api/profile/insights`;
-  }, []);
+  }, [appBasePath]);
   const profileByUserUrl = useMemo(() => {
     const base = (import.meta.env.VITE_API_URL || "").trim();
-    if (!base) return `${window.location.origin}/api/profile`;
+    if (!base) return `${window.location.origin}${appBasePath}/api/profile`;
     const clean = base.replace(/\/$/, "");
     return clean.endsWith("/api") ? `${clean}/profile` : `${clean}/api/profile`;
-  }, []);
+  }, [appBasePath]);
   const membershipUrl = useMemo(() => {
     const base = (import.meta.env.VITE_API_URL || "").trim();
-    if (!base) return `${window.location.origin}/api/membership`;
+    if (!base) return `${window.location.origin}${appBasePath}/api/membership`;
     const clean = base.replace(/\/$/, "");
     return clean.endsWith("/api") ? `${clean}/membership` : `${clean}/api/membership`;
-  }, []);
+  }, [appBasePath]);
   const membershipRedeemUrl = useMemo(() => {
     const base = (import.meta.env.VITE_API_URL || "").trim();
-    if (!base) return `${window.location.origin}/api/membership/redeem`;
+    if (!base) return `${window.location.origin}${appBasePath}/api/membership/redeem`;
     const clean = base.replace(/\/$/, "");
     return clean.endsWith("/api") ? `${clean}/membership/redeem` : `${clean}/api/membership/redeem`;
-  }, []);
+  }, [appBasePath]);
   const friendsUrl = useMemo(() => {
     const base = (import.meta.env.VITE_API_URL || "").trim();
-    if (!base) return `${window.location.origin}/api/friends`;
+    if (!base) return `${window.location.origin}${appBasePath}/api/friends`;
     const clean = base.replace(/\/$/, "");
     return clean.endsWith("/api") ? `${clean}/friends` : `${clean}/api/friends`;
-  }, []);
+  }, [appBasePath]);
   const friendSearchUrl = useMemo(() => {
     const base = (import.meta.env.VITE_API_URL || "").trim();
-    if (!base) return `${window.location.origin}/api/friends/search`;
+    if (!base) return `${window.location.origin}${appBasePath}/api/friends/search`;
     const clean = base.replace(/\/$/, "");
     return clean.endsWith("/api") ? `${clean}/friends/search` : `${clean}/api/friends/search`;
-  }, []);
+  }, [appBasePath]);
   const friendRequestUrl = useMemo(() => {
     const base = (import.meta.env.VITE_API_URL || "").trim();
-    if (!base) return `${window.location.origin}/api/friends/request`;
+    if (!base) return `${window.location.origin}${appBasePath}/api/friends/request`;
     const clean = base.replace(/\/$/, "");
     return clean.endsWith("/api") ? `${clean}/friends/request` : `${clean}/api/friends/request`;
-  }, []);
+  }, [appBasePath]);
   const friendRespondUrl = useMemo(() => {
     const base = (import.meta.env.VITE_API_URL || "").trim();
-    if (!base) return `${window.location.origin}/api/friends/respond`;
+    if (!base) return `${window.location.origin}${appBasePath}/api/friends/respond`;
     const clean = base.replace(/\/$/, "");
     return clean.endsWith("/api") ? `${clean}/friends/respond` : `${clean}/api/friends/respond`;
-  }, []);
+  }, [appBasePath]);
   const friendRemoveUrl = useMemo(() => {
     const base = (import.meta.env.VITE_API_URL || "").trim();
-    if (!base) return `${window.location.origin}/api/friends/remove`;
+    if (!base) return `${window.location.origin}${appBasePath}/api/friends/remove`;
     const clean = base.replace(/\/$/, "");
     return clean.endsWith("/api") ? `${clean}/friends/remove` : `${clean}/api/friends/remove`;
-  }, []);
+  }, [appBasePath]);
   const friendCompatibilityUrlBase = useMemo(() => {
     const base = (import.meta.env.VITE_API_URL || "").trim();
-    if (!base) return `${window.location.origin}/api/friends/compatibility`;
+    if (!base) return `${window.location.origin}${appBasePath}/api/friends/compatibility`;
     const clean = base.replace(/\/$/, "");
     return clean.endsWith("/api") ? `${clean}/friends/compatibility` : `${clean}/api/friends/compatibility`;
-  }, []);
+  }, [appBasePath]);
+  const friendCompatibilityEmailUrl = useMemo(() => {
+    const base = (import.meta.env.VITE_API_URL || "").trim();
+    if (!base) return `${window.location.origin}${appBasePath}/api/friends/compatibility/email`;
+    const clean = base.replace(/\/$/, "");
+    return clean.endsWith("/api") ? `${clean}/friends/compatibility/email` : `${clean}/api/friends/compatibility/email`;
+  }, [appBasePath]);
   const authBaseUrl = useMemo(() => {
     const base = (import.meta.env.VITE_AUTHENTIK_URL || "https://auth.sputnet.world").trim();
     return base.replace(/\/$/, "");
   }, []);
+  const compatibilityEmailRecipient = useMemo(
+    () => String(profileInfo?.email || membership?.email || "").trim(),
+    [membership?.email, profileInfo?.email]
+  );
   const dateLocale = useMemo(() => oracleLanguage || "sv-SE", [oracleLanguage]);
   const aiMembershipUnlocked = Boolean(membership?.active && membership.ai_access && membership.tier !== "free");
   const friendLabel = useCallback(
@@ -3522,6 +3770,35 @@ export default function App() {
     },
     [dateLocale]
   );
+  const homeHudName = useMemo(
+    () =>
+      String(
+        profileInfo?.name ||
+          membership?.display_name ||
+          profileInfo?.username ||
+          membership?.username ||
+          "DU"
+      ).trim(),
+    [membership?.display_name, membership?.username, profileInfo?.name, profileInfo?.username]
+  );
+  const homeHudTag = useMemo(() => {
+    const compact = homeHudName.replace(/[^0-9A-Za-zÅÄÖåäö]+/g, "").toUpperCase();
+    return (compact || userInitial || "DU").slice(0, 3) || "DU";
+  }, [homeHudName, userInitial]);
+  const homeHudRequests = friendsIncoming.length + friendsOutgoing.length;
+  const homeHudGames = matchId ? 1 : 0;
+  const homeHudWalletClass = aiMembershipUnlocked
+    ? "homeHudWallet homeHudWallet--up"
+    : membership?.active
+      ? "homeHudWallet"
+      : "homeHudWallet homeHudWallet--down";
+  const homeHudWalletTitle = membershipLoading
+    ? tr("Laddar medlemskap...", "Loading membership...")
+    : tr(
+        `Klubbnivå: ${localizeMembershipTier(membership?.tier)}. ${aiMembershipUnlocked ? "AI är upplåst." : membership?.active ? "Medlemskapet är aktivt." : "Aktivera medlemskap för att låsa upp AI och vänner."}`,
+        `Club tier: ${localizeMembershipTier(membership?.tier)}. ${aiMembershipUnlocked ? "AI is unlocked." : membership?.active ? "Membership is active." : "Activate membership to unlock AI and friends."}`
+      );
+  const showLobbyBack = !pathname.startsWith("/lobby") && !pathname.startsWith("/games");
   const defaultBirthDate = useMemo(() => {
     const d = new Date();
     d.setFullYear(d.getFullYear() - 26);
@@ -3558,6 +3835,19 @@ export default function App() {
     return Math.round((asUtc - inputUtc) / 60000);
   };
 
+  const syncAccountForm = useCallback((user: Partial<UserInfo> | null | undefined) => {
+    const nextForm = {
+      name: String(user?.name ?? "").trim(),
+      username: String(user?.username ?? "").trim(),
+      email: String(user?.email ?? "").trim(),
+    };
+    setAccountForm(nextForm);
+    accountLastSavedRef.current = JSON.stringify(nextForm);
+    setAccountDirty(false);
+    setAccountStatus(null);
+    setAccountError(null);
+  }, []);
+
   useEffect(() => {
     const loadProfile = async () => {
       try {
@@ -3587,9 +3877,17 @@ export default function App() {
             setMapLatLng({ lat: p.birth_lat, lng: p.birth_lng });
           }
           setProfileMissing(false);
-          setProfileInfo(p);
           if (data.user) {
-            setProfileInfo((prev) => ({ ...(prev ?? p), ...(data.user as UserInfo) }));
+            const mergedUser: ProfilePayload = {
+              ...p,
+              ...(data.user as UserInfo),
+              user_id: p.user_id ?? "",
+            };
+            setProfileInfo(mergedUser);
+            syncAccountForm(data.user as UserInfo);
+          } else {
+            setProfileInfo(p);
+            syncAccountForm(p);
           }
           try {
             const draftRaw = localStorage.getItem(draftKey);
@@ -3606,9 +3904,12 @@ export default function App() {
         } else {
           setProfileMissing(true);
           if (data.user) {
-            setProfileInfo((prev) => ({ ...(prev ?? ({ user_id: "" } as ProfilePayload)), ...(data.user as UserInfo) }));
+            const mergedUser = { ...(data.user as UserInfo), user_id: "" } as ProfilePayload;
+            setProfileInfo(mergedUser);
+            syncAccountForm(data.user as UserInfo);
           } else {
             setProfileInfo(null);
+            syncAccountForm(null);
           }
         }
       } catch (err) {
@@ -3618,7 +3919,7 @@ export default function App() {
       }
     };
     loadProfile();
-  }, [profileUrl, tr]);
+  }, [draftKey, profileUrl, syncAccountForm, tr]);
 
   const loadMembership = useCallback(async () => {
     try {
@@ -3832,9 +4133,14 @@ export default function App() {
       try {
         setFriendCompatibilityLoadingId(targetUserId);
         setFriendsError(null);
-        const res = await fetch(`${friendCompatibilityUrlBase}/${encodeURIComponent(targetUserId)}`, {
+        setCompatibilityEmailStatus(null);
+        setCompatibilityEmailError(null);
+        const requestUrl = new URL(`${friendCompatibilityUrlBase}/${encodeURIComponent(targetUserId)}`);
+        requestUrl.searchParams.set("lang", oracleLanguage || "sv-SE");
+        const res = await fetch(requestUrl.toString(), {
           credentials: "include",
           cache: "no-store",
+          headers: { "x-stardom-locale": oracleLanguage || "sv-SE" },
         });
         const data = await res.json().catch(() => null);
         if (!res.ok || !data?.ok || !data.compatibility) {
@@ -3850,21 +4156,418 @@ export default function App() {
               `${dimension.label}: ${dimension.score}/100\n${dimension.note}`
           ),
         ].join("\n\n");
-        openModal(
-          tr("Horoskopjämförelse", "Compatibility reading"),
+        setModal({
+          title: tr("Horoskopjämförelse", "Compatibility reading"),
           body,
-          `${friendLabel(compatibility.friend)} · ${compatibility.band} · ${compatibility.overall}/100`,
-          undefined,
-          "💞"
-        );
+          subtitle: `${friendLabel(compatibility.friend)} · ${compatibility.band} · ${formatCompatibilityHeadline(compatibility)}`,
+          icon: "💞",
+          compatibility,
+        });
       } catch {
         setFriendsError(tr("Kunde inte läsa kompatibilitet.", "Could not load compatibility."));
       } finally {
         setFriendCompatibilityLoadingId(null);
       }
     },
-    [friendCompatibilityUrlBase, friendLabel, openModal, tr]
+    [formatCompatibilityHeadline, friendCompatibilityUrlBase, friendLabel, oracleLanguage, tr]
   );
+
+  const buildCompatibilityPrintHtml = (compatibility: FriendCompatibility) => {
+    const deepDive = compatibility.deep_dive;
+    if (!deepDive) return "";
+    const title = tr("Horoskopjämförelse", "Compatibility reading");
+    const subtitle = `${friendLabel(compatibility.friend)} · ${compatibility.band} · ${formatCompatibilityHeadline(compatibility)}`;
+    const calcNote = getModalCalcNote(title);
+    const sectionsHtml = deepDive.sections
+      .map((section) => {
+        const paragraphs = section.body
+          .split(/\n\n+/)
+          .map((paragraph) => paragraph.trim())
+          .filter(Boolean)
+          .map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`)
+          .join("");
+        return `<article class="compat-section">
+          <div class="compat-section__head">
+            <h3>${escapeHtml(section.title)}</h3>
+            <span>${escapeHtml(section.score)}/100</span>
+          </div>
+          <p class="compat-section__summary">${escapeHtml(section.summary)}</p>
+          ${paragraphs}
+        </article>`;
+      })
+      .join("");
+    const dimensionsHtml = compatibility.dimensions
+      .map(
+        (dimension) => `<article class="compat-metric">
+          <div class="compat-metric__head">
+            <strong>${escapeHtml(dimension.label)}</strong>
+            <span>${escapeHtml(dimension.score)}/100</span>
+          </div>
+          <p>${escapeHtml(dimension.note)}</p>
+        </article>`
+      )
+      .join("");
+    const guidanceHtml = deepDive.guidance?.length
+      ? `<section class="compat-guidance">
+          <h3>${escapeHtml(tr("Det här behöver ni vara rädda om", "What you need to protect"))}</h3>
+          <ul>${deepDive.guidance.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+        </section>`
+      : "";
+
+    return `<!doctype html>
+<html lang="${escapeHtml(isSwedish ? "sv" : "en")}">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${escapeHtml(title)}</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Space+Grotesk:wght@400;500;600&display=swap");
+      :root {
+        --shell: linear-gradient(135deg, #17192f 0%, #1f1430 58%, #382619 100%);
+        --bg: #efe5d4;
+        --card: rgba(255, 255, 255, 0.05);
+        --line: rgba(255, 255, 255, 0.12);
+        --ink: #f4ebdc;
+        --muted: #d9d0c2;
+        --warm: #ffdca8;
+        --accent: #db4a2b;
+      }
+      * {
+        box-sizing: border-box;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      @page {
+        size: A4;
+        margin: 12mm;
+      }
+      html, body {
+        margin: 0;
+        min-height: 100%;
+        background: var(--bg);
+        color: var(--ink);
+      }
+      body {
+        padding: 24px 16px 40px;
+        font-family: "Space Grotesk", sans-serif;
+      }
+      .wrap {
+        width: min(980px, 100%);
+        margin: 0 auto;
+      }
+      .shell {
+        background: var(--shell);
+        border: 1px solid rgba(63, 55, 79, 0.92);
+        border-radius: 28px;
+        padding: 28px;
+        box-shadow: 0 26px 80px rgba(19, 15, 24, 0.28);
+      }
+      .eyebrow {
+        margin: 0 0 10px;
+        font-size: 12px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: #f0c88f;
+      }
+      h1, h2, h3 {
+        margin: 0;
+        font-family: "Fraunces", Georgia, serif;
+        color: #fff1d9;
+      }
+      h1 {
+        font-size: clamp(2.4rem, 5vw, 3.9rem);
+        line-height: 0.98;
+      }
+      .subtitle {
+        margin: 10px 0 0;
+        color: var(--muted);
+        font-size: 1rem;
+        line-height: 1.6;
+      }
+      .intro,
+      .compat-section p,
+      .compat-metric p,
+      .compat-outro,
+      .calc-note,
+      li {
+        margin: 0;
+        font-size: 1.04rem;
+        line-height: 1.72;
+        color: var(--ink);
+      }
+      .hero {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 14px;
+        margin: 18px 0 22px;
+      }
+      .hero-card,
+      .compat-metric,
+      .compat-section,
+      .compat-guidance,
+      .compat-outro,
+      .calc-note {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+      }
+      .hero-card,
+      .compat-metric {
+        padding: 16px;
+      }
+      .hero-card__label {
+        margin: 0 0 8px;
+        font-size: 12px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .hero-card__value {
+        margin: 0;
+        font-size: 1.8rem;
+        line-height: 1.18;
+        color: #fff3de;
+        font-family: "Fraunces", Georgia, serif;
+        font-weight: 700;
+      }
+      .compat-metrics,
+      .compat-sections {
+        display: grid;
+        gap: 14px;
+      }
+      .compat-metrics {
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+      .compat-metric__head,
+      .compat-section__head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+        margin-bottom: 10px;
+      }
+      .compat-metric__head strong,
+      .compat-section__head h3 {
+        font-size: 1.12rem;
+        line-height: 1.28;
+      }
+      .compat-metric__head span,
+      .compat-section__head span {
+        display: inline-flex;
+        align-items: center;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: rgba(255, 214, 144, 0.12);
+        border: 1px solid rgba(255, 214, 144, 0.2);
+        color: var(--warm);
+        font-size: 0.9rem;
+        white-space: nowrap;
+      }
+      .compat-section {
+        padding: 20px;
+      }
+      .compat-section__summary {
+        margin: 0 0 12px;
+        color: var(--warm);
+      }
+      .compat-section p + p {
+        margin-top: 12px;
+      }
+      .compat-guidance,
+      .compat-outro,
+      .calc-note {
+        padding: 18px 20px;
+      }
+      .compat-guidance {
+        margin-top: 18px;
+      }
+      .compat-guidance ul {
+        margin: 12px 0 0;
+        padding-left: 20px;
+        display: grid;
+        gap: 10px;
+      }
+      .compat-outro,
+      .calc-note {
+        margin-top: 18px;
+      }
+      .calc-note {
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--muted);
+      }
+      @media print {
+        body {
+          padding: 0;
+        }
+        .wrap {
+          width: 100%;
+        }
+        .shell {
+          box-shadow: none;
+        }
+      }
+      @media (max-width: 720px) {
+        body {
+          padding: 12px 8px 24px;
+        }
+        .shell {
+          padding: 18px;
+          border-radius: 22px;
+        }
+        .compat-metric__head,
+        .compat-section__head {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <main class="shell">
+        <p class="eyebrow">SPUTNET WORLD</p>
+        <h1>${escapeHtml(title)}</h1>
+        <p class="subtitle">${escapeHtml(subtitle)}</p>
+        <section class="hero">
+          <article class="hero-card">
+            <p class="hero-card__label">${escapeHtml(tr("Betyg", "Rating"))}</p>
+            <p class="hero-card__value">${escapeHtml(formatCompatibilityHeadline(compatibility))}</p>
+          </article>
+          <article class="hero-card">
+            <p class="hero-card__label">${escapeHtml(tr("Dynamik", "Dynamic"))}</p>
+            <p class="hero-card__value">${escapeHtml(compatibility.band)}</p>
+          </article>
+        </section>
+        <p class="intro">${escapeHtml(deepDive.intro)}</p>
+        <section class="compat-metrics">${dimensionsHtml}</section>
+        <section class="compat-sections">${sectionsHtml}</section>
+        ${guidanceHtml}
+        ${deepDive.outro ? `<section class="compat-outro"><p>${escapeHtml(deepDive.outro)}</p></section>` : ""}
+        <section class="calc-note"><p>${escapeHtml(calcNote)}</p></section>
+      </main>
+    </div>
+  </body>
+</html>`;
+  };
+
+  const printCompatibilityReport = useCallback(
+    async (compatibility: FriendCompatibility) => {
+      const html = buildCompatibilityPrintHtml(compatibility);
+      if (!html) return;
+      setCompatibilityEmailStatus(null);
+      setCompatibilityEmailError(null);
+      const printWindow = window.open("", "_blank", "width=1100,height=900");
+      if (!printWindow) {
+        setCompatibilityEmailError(
+          tr(
+            "Kunde inte öppna PDF-vyn. Tillåt popup-fönster och försök igen.",
+            "Could not open the PDF view. Allow pop-ups and try again."
+          )
+        );
+        return;
+      }
+      printWindow.document.open();
+      printWindow.document.write(html);
+      printWindow.document.close();
+      printWindow.addEventListener(
+        "afterprint",
+        () => {
+          setTimeout(() => {
+            printWindow.close();
+          }, 120);
+        },
+        { once: true }
+      );
+
+      const triggerPrint = () => {
+        const finalize = () => {
+          printWindow.focus();
+          printWindow.print();
+        };
+        const fontsReady = printWindow.document.fonts?.ready;
+        if (fontsReady && typeof fontsReady.then === "function") {
+          fontsReady.catch(() => undefined).finally(() => {
+            setTimeout(finalize, 120);
+          });
+          return;
+        }
+        setTimeout(finalize, 120);
+      };
+
+      if (printWindow.document.readyState === "complete") {
+        triggerPrint();
+      } else {
+        printWindow.addEventListener(
+          "load",
+          () => {
+            triggerPrint();
+          },
+          { once: true }
+        );
+      }
+    },
+    [formatCompatibilityHeadline, friendLabel, isSwedish, tr]
+  );
+
+  const sendCompatibilityEmail = useCallback(
+    async (compatibility: FriendCompatibility) => {
+      const to = compatibilityEmailRecipient;
+      if (!to) {
+        setCompatibilityEmailStatus(null);
+        setCompatibilityEmailError(
+          tr(
+            "Lägg till en e-postadress under Profil > Konto först.",
+            "Add an email address under Profile > Account first."
+          )
+        );
+        return;
+      }
+      try {
+        setCompatibilityEmailBusy(true);
+        setCompatibilityEmailError(null);
+        setCompatibilityEmailStatus(tr("Skickar horoskopjämförelsen...", "Sending compatibility reading..."));
+        const res = await fetch(friendCompatibilityEmailUrl, {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            "x-stardom-locale": oracleLanguage || "sv-SE",
+          },
+          body: JSON.stringify({
+            targetUserId: compatibility.friend.user_id,
+            to,
+            locale: oracleLanguage || "sv-SE",
+            reportUrl: window.location.href,
+          }),
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.ok) {
+          setCompatibilityEmailStatus(null);
+          setCompatibilityEmailError(
+            data?.message || tr("Kunde inte skicka jämförelsen via e-post.", "Could not send the reading by email.")
+          );
+          return;
+        }
+        setCompatibilityEmailStatus(
+          data?.message || tr("Horoskopjämförelsen skickades.", "The compatibility reading was sent.")
+        );
+        setCompatibilityEmailError(null);
+      } catch {
+        setCompatibilityEmailStatus(null);
+        setCompatibilityEmailError(
+          tr("Kunde inte skicka jämförelsen via e-post.", "Could not send the reading by email.")
+        );
+      } finally {
+        setCompatibilityEmailBusy(false);
+      }
+    },
+    [compatibilityEmailRecipient, friendCompatibilityEmailUrl, oracleLanguage, tr]
+  );
+
+  useEffect(() => {
+    setCompatibilityEmailStatus(null);
+    setCompatibilityEmailError(null);
+  }, [modal?.compatibility?.friend?.user_id]);
 
   useEffect(() => {
     if (profileLoading) return;
@@ -4433,6 +5136,16 @@ export default function App() {
     });
   };
 
+  const handleAccountChange = (key: keyof typeof accountForm, value: string) => {
+    setAccountForm((prev) => {
+      const next = { ...prev, [key]: value };
+      setAccountDirty(JSON.stringify(next) !== accountLastSavedRef.current);
+      setAccountStatus(null);
+      setAccountError(null);
+      return next;
+    });
+  };
+
   const handleBirthDateChange = (dates: Date[]) => {
     const date = dates?.[0];
     if (!date) return;
@@ -4760,9 +5473,11 @@ export default function App() {
         const refreshed = await fetch(profileUrl, { credentials: "include" });
         const refreshedData = await refreshed.json().catch(() => null);
         if (refreshed.ok && refreshedData?.ok && refreshedData.profile) {
-          const merged = {
-            ...(refreshedData.profile as ProfilePayload),
+          const refreshedProfile = refreshedData.profile as ProfilePayload;
+          const merged: ProfilePayload = {
+            ...refreshedProfile,
             ...(refreshedData.user as UserInfo),
+            user_id: refreshedProfile.user_id ?? "",
           };
           setProfileInfo(merged);
         }
@@ -4777,42 +5492,145 @@ export default function App() {
     }
   };
 
+  const saveAccount = async () => {
+    setAccountStatus(tr("Sparar konto...", "Saving account..."));
+    setAccountError(null);
+    try {
+      const payload = {
+        name: accountForm.name.trim(),
+        username: accountForm.username.trim(),
+        email: accountForm.email.trim(),
+      };
+      const res = await fetch(profileAccountUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.ok || !data?.user) {
+        setAccountError(
+          data?.error === "invalid_email"
+            ? tr("E-postadressen är inte giltig.", "The email address is invalid.")
+            : tr("Kunde inte spara konto.", "Could not save account.")
+        );
+        setAccountStatus(null);
+        return;
+      }
+      const nextUser = data.user as UserInfo;
+      syncAccountForm(nextUser);
+      setProfileInfo((prev) => ({
+        ...(prev ?? ({ user_id: "" } as ProfilePayload)),
+        ...nextUser,
+        user_id: prev?.user_id ?? "",
+      }));
+      setAvatarVersion(Date.now());
+      setAccountStatus(tr("Kontot är uppdaterat.", "Account updated."));
+    } catch {
+      setAccountError(tr("Kunde inte spara konto.", "Could not save account."));
+      setAccountStatus(null);
+    }
+  };
+
   return (
-    <main className={`app ${isTarotPage ? "app-tarot-cinema" : ""}`}>
-      {!isTarotPage ? (
-        <nav className="top-nav">
-          <div className="brand">CHKN</div>
-          <div className="nav-links">
-            <a className={isGamesPage ? "nav-link active" : "nav-link"} href="/lobby">
-              {tr("Spel", "Games")}
+    <>
+      <header className="homeHud">
+        <div className="homeHud__inner">
+          <a className="homeHud__brand" href={appHref("/lobby")}>
+            STARDOM HOME
+          </a>
+
+          <a className="homeHudMe" href={appHref("/profile")} title={homeHudName || tr("Din profil", "Your profile")}>
+            <img
+              className="homeHudMe__avatar"
+              src={avatarUrl}
+              alt={homeHudName || "Avatar"}
+              onError={(event) => {
+                event.currentTarget.src = sharedAvatarUrl("Default.jpg");
+              }}
+            />
+            <span className="homeHudMe__tag">{homeHudTag}</span>
+          </a>
+
+          <div className={homeHudWalletClass} title={homeHudWalletTitle}>
+            <span className="homeHudWalletCoin" aria-hidden>
+              ◉
+            </span>
+            <span className="homeHudWalletUnit">{tr("KLUBB", "CLUB")}</span>
+            <b className="homeHudWalletBalance">
+              {membershipLoading ? "..." : localizeMembershipTier(membership?.tier)}
+            </b>
+            <span className="homeHudWalletDelta">
+              {membershipLoading
+                ? "..."
+                : aiMembershipUnlocked
+                  ? "AI"
+                  : membership?.active
+                    ? tr("AKTIV", "ACTIVE")
+                    : tr("LÅST", "LOCKED")}
+            </span>
+          </div>
+
+          <div className="homeHudStats">
+            <a
+              className={["homeHudStat", friendsAccepted.length > 0 ? "homeHudStat--active" : ""].join(" ")}
+              href={appHref("/profile")}
+            >
+              {tr("Vänner", "Friends")} <b>{membership?.active && !friendsLoading ? friendsAccepted.length : 0}</b>
             </a>
-            <a className={isTarotPage ? "nav-link active" : "nav-link"} href="/tarot/oracle">
+            <a
+              className={["homeHudStat", homeHudRequests > 0 ? "homeHudStat--hot" : ""].join(" ")}
+              href={appHref("/profile")}
+            >
+              {tr("Förfrågningar", "Requests")} <b>{membership?.active && !friendsLoading ? homeHudRequests : 0}</b>
+            </a>
+            <a
+              className={["homeHudStat", homeHudGames > 0 ? "homeHudStat--active" : ""].join(" ")}
+              href={appHref("/lobby")}
+            >
+              {tr("Pågående spel", "Active games")} <b>{homeHudGames}</b>
+            </a>
+          </div>
+
+          {showLobbyBack ? (
+            <a className="homeHudBack" href={appHref("/lobby")}>
+              {tr("Till Stardom", "Back to Stardom")}
+            </a>
+          ) : null}
+        </div>
+        <div className="homeHudNav">
+          <div className="homeHudNav__links">
+            <a className={isGamesPage ? "homeHudNavLink active" : "homeHudNavLink"} href={appHref("/lobby")}>
+              {tr("Stardom", "Stardom")}
+            </a>
+            <a className={isTarotPage ? "homeHudNavLink active" : "homeHudNavLink"} href={appHref("/tarot/oracle")}>
               {tr("Tarot", "Tarot")}
             </a>
-            <a className={isProfilePage ? "nav-link active" : "nav-link"} href="/profile">
-              {tr("Profil", "Profile")}
+            <a className={isProfilePage ? "homeHudNavLink active" : "homeHudNavLink"} href={appHref("/profile")}>
+              {tr("Profile", "Profile")}
             </a>
-            <a className={isSettingsPage ? "nav-link active" : "nav-link"} href="/settings">
-              {tr("Inställningar", "Settings")}
+            <a className={isSettingsPage ? "homeHudNavLink active" : "homeHudNavLink"} href={appHref("/settings")}>
+              {tr("Settings", "Settings")}
             </a>
-            <label className="tarot-pref">
-              <span>{tr("Språk", "Language")}</span>
-              <select
-                className="input"
-                value={oracleLanguage}
-                onChange={(e) => setOracleLanguage(e.target.value)}
-              >
-                {ORACLE_LANGUAGES.map((lang) => (
-                  <option key={`nav-lang-${lang.code}`} value={lang.code}>
-                    {lang.label}
-                  </option>
-                ))}
-              </select>
-            </label>
           </div>
-        </nav>
-      ) : null}
+          <label className="homeHudLang">
+            <span>{tr("Language", "Language")}</span>
+            <select
+              className="homeHudLang__select"
+              value={oracleLanguage}
+              onChange={(e) => setOracleLanguage(e.target.value)}
+            >
+              {ORACLE_LANGUAGES.map((lang) => (
+                <option key={`hud-lang-${lang.code}`} value={lang.code}>
+                  {lang.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </header>
 
+      <main className={`app ${isTarotPage ? "app-tarot-cinema" : ""}`}>
       {!isProfilePage && modal ? (
         <div
           className="modal-backdrop"
@@ -4820,7 +5638,7 @@ export default function App() {
           aria-modal="true"
           onClick={() => setModal(null)}
         >
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div className={`modal ${modal.compatibility?.deep_dive ? "modal--compatibility" : ""}`} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <div className="modal-title">
                 {modal.icon ? <span className="modal-icon">{modal.icon}</span> : null}
@@ -4839,33 +5657,7 @@ export default function App() {
               </button>
             </div>
             <div className="modal-body">
-              {modal.imageUrl ? (
-                <div className="modal-media">
-                  <img
-                    className="modal-image tarot-modal-image"
-                    src={modal.imageUrl}
-                    alt={modal.imageAlt || modal.title}
-                    loading="lazy"
-                  />
-                </div>
-              ) : null}
-              <p>{modal.body}</p>
-              <p className="modal-note">{getModalCalcNote(modal.title)}</p>
-              {modal.actions?.length ? (
-                <div className="modal-actions">
-                  {modal.actions.map((action) => (
-                    <a
-                      key={action.href}
-                      className="btn-ghost"
-                      href={action.href}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      {action.label}
-                    </a>
-                  ))}
-                </div>
-              ) : null}
+              {renderModalContent(modal)}
             </div>
           </div>
         </div>
@@ -4880,7 +5672,7 @@ export default function App() {
               aria-modal="true"
               onClick={() => setModal(null)}
             >
-              <div className="modal" onClick={(e) => e.stopPropagation()}>
+              <div className={`modal ${modal.compatibility?.deep_dive ? "modal--compatibility" : ""}`} onClick={(e) => e.stopPropagation()}>
                 <div className="modal-header">
                   <div className="modal-title">
                     {modal.icon ? <span className="modal-icon">{modal.icon}</span> : null}
@@ -4899,33 +5691,7 @@ export default function App() {
                   </button>
                 </div>
                 <div className="modal-body">
-                  {modal.imageUrl ? (
-                    <div className="modal-media">
-                      <img
-                        className="modal-image tarot-modal-image"
-                        src={modal.imageUrl}
-                        alt={modal.imageAlt || modal.title}
-                        loading="lazy"
-                      />
-                    </div>
-                  ) : null}
-                  <p>{modal.body}</p>
-                  <p className="modal-note">{getModalCalcNote(modal.title)}</p>
-                  {modal.actions?.length ? (
-                    <div className="modal-actions">
-                      {modal.actions.map((action) => (
-                        <a
-                          key={action.href}
-                          className="btn-ghost"
-                          href={action.href}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          {action.label}
-                        </a>
-                      ))}
-                    </div>
-                  ) : null}
+                  {renderModalContent(modal)}
                 </div>
               </div>
             </div>
@@ -4966,7 +5732,7 @@ export default function App() {
                       src={avatarUrl}
                       alt={profileInfo?.username ? `${profileInfo.username} avatar` : "Avatar"}
                       onError={(event) => {
-                        event.currentTarget.src = "/avatars/Default.jpg";
+                        event.currentTarget.src = sharedAvatarUrl("Default.jpg");
                       }}
                     />
                     <p className="avatar-modal-meta">
@@ -5017,7 +5783,7 @@ export default function App() {
                       target="_blank"
                       rel="noreferrer"
                     >
-                      {tr("Öppna kontosidan", "Open account page")}
+                      {tr("Öppna säkerhetssidan", "Open security page")}
                     </a>
                   </div>
                   <input
@@ -5196,6 +5962,100 @@ export default function App() {
               </div>
             </div>
           ) : null}
+          <section className="profile-card">
+            <div className="profile-header">
+              <div>
+                <p className="eyebrow">{tr("Konto", "Account")}</p>
+                <h2>{tr("Din gemensamma Sputnet-profil", "Your shared Sputnet profile")}</h2>
+                <p className="lead">
+                  {tr(
+                    "Det här kontot delas mellan spelen. Namn, e-post och avatar uppdateras på ett ställe.",
+                    "This account is shared across the games. Your name, email, and avatar update in one place."
+                  )}
+                </p>
+              </div>
+              <div className="profile-badge">
+                <span>{accountDirty ? tr("Ändringar", "Changes") : tr("Synkad", "Synced")}</span>
+              </div>
+            </div>
+
+            <div className="profile-grid">
+              <div className="profile-field">
+                <label>{tr("Avatar", "Avatar")}</label>
+                <div className="summary-item">
+                  <button
+                    type="button"
+                    className="summary-icon avatar-icon"
+                    onClick={(e) => openAvatarModal(e)}
+                  >
+                    <img
+                      src={avatarUrl}
+                      alt={accountForm.username ? `${accountForm.username} avatar` : "Avatar"}
+                      onError={(event) => {
+                        event.currentTarget.src = sharedAvatarUrl("Default.jpg");
+                      }}
+                    />
+                  </button>
+                  <div>
+                    <p className="summary-label">{tr("Visas i hela appen", "Used across the whole app")}</p>
+                    <p className="summary-value">
+                      {accountForm.name || accountForm.username || tr("Din profilbild", "Your profile image")}
+                    </p>
+                  </div>
+                </div>
+                <p className="help-text">
+                  {tr(
+                    "Byt avatar här så slår den igenom i Stardom, Yatzy och resten av Sputnet.",
+                    "Change your avatar here and it will carry across Stardom, Yatzy, and the rest of Sputnet."
+                  )}
+                </p>
+              </div>
+
+              <div className="profile-field">
+                <label>{tr("Namn", "Name")}</label>
+                <input
+                  type="text"
+                  value={accountForm.name}
+                  onChange={(e) => handleAccountChange("name", e.target.value)}
+                  placeholder={tr("Ditt visningsnamn", "Your display name")}
+                />
+              </div>
+
+              <div className="profile-field">
+                <label>{tr("Användarnamn", "Username")}</label>
+                <input
+                  type="text"
+                  value={accountForm.username}
+                  onChange={(e) => handleAccountChange("username", e.target.value)}
+                  placeholder={tr("Ditt användarnamn", "Your username")}
+                />
+              </div>
+
+              <div className="profile-field">
+                <label>{tr("E-post", "Email")}</label>
+                <input
+                  type="email"
+                  value={accountForm.email}
+                  onChange={(e) => handleAccountChange("email", e.target.value)}
+                  placeholder={tr("namn@exempel.se", "name@example.com")}
+                />
+              </div>
+            </div>
+
+            <div className="profile-actions">
+              <button className="btn-primary" type="button" onClick={saveAccount} disabled={profileLoading}>
+                {tr("Spara konto", "Save account")}
+              </button>
+              <button className="btn-ghost" type="button" onClick={() => openAvatarModal()}>
+                {tr("Byt avatar", "Change avatar")}
+              </button>
+              <a className="btn-ghost" href={`${authBaseUrl}/if/user/`} target="_blank" rel="noreferrer">
+                {tr("Säkerhet i Authentik", "Security in Authentik")}
+              </a>
+              {accountStatus ? <span className="status">{accountStatus}</span> : null}
+              {accountError ? <span className="status bad">{accountError}</span> : null}
+            </div>
+          </section>
           {profileMissing ? (
             <section className="profile-card">
         <div className="profile-header">
@@ -5358,80 +6218,6 @@ export default function App() {
             <p className="eyebrow">{tr("Din profil", "Your profile")}</p>
 
           <div className="summary-row">
-            <div
-              className="summary-card account-card"
-              role="button"
-              tabIndex={0}
-              onClick={() =>
-                openModal(
-                  tr("Konto", "Account"),
-                  tr(
-                    "Ditt användarnamn och din e-post hanteras i Sputnets SpaceDatabase. Där kan du visa eller uppdatera säkerhet och andra inställningar.",
-                    "Your username and email are managed in Sputnet's SpaceDatabase. You can view or update your security and other settings there."
-                  ),
-                  undefined,
-                  [{ label: tr("Öppna kontosidan", "Open account page"), href: `${authBaseUrl}/if/user/` }]
-                )
-              }
-              onKeyDown={(event) => {
-                if (event.key !== "Enter" && event.key !== " ") return;
-                event.preventDefault();
-                openModal(
-                  tr("Konto", "Account"),
-                  tr(
-                    "Ditt användarnamn och din e-post hanteras i Sputnets SpaceDatabase. Där kan du visa eller uppdatera säkerhet och andra inställningar.",
-                    "Your username and email are managed in Sputnet's SpaceDatabase. You can view or update your security and other settings there."
-                  ),
-                  undefined,
-                  [{ label: tr("Öppna kontosidan", "Open account page"), href: `${authBaseUrl}/if/user/` }]
-                );
-              }}
-            >
-              <div className="summary-card-header">
-                <h3>{tr("Konto", "Account")}</h3>
-              </div>
-              <div className="summary-items">
-                <div className="summary-item">
-                  <button
-                    type="button"
-                    className="summary-icon avatar-icon"
-                    onClick={(e) => openAvatarModal(e)}
-                  >
-                    <img
-                      src={avatarUrl}
-                      alt={profileInfo?.username ? `${profileInfo.username} avatar` : "Avatar"}
-                      onError={(e) => {
-                        e.currentTarget.src = "/avatars/Default.jpg";
-                      }}
-                    />
-                  </button>
-                  <div>
-                    <p className="summary-label">{tr("Användarnamn", "Username")}</p>
-                    <p className="summary-value">{profileInfo?.username ?? "—"}</p>
-                  </div>
-                </div>
-                <div className="summary-item">
-                  <span className="summary-icon">✉</span>
-                  <div>
-                    <p className="summary-label">{tr("E-post", "Email")}</p>
-                    <p className="summary-value">
-                      {profileInfo?.email ? (
-                        <a href={`mailto:${profileInfo.email}`}>{tr("E-post", "Email")}</a>
-                      ) : (
-                        "—"
-                      )}
-                    </p>
-                  </div>
-                </div>
-                <div className="summary-item">
-                  <span className="summary-icon">✎</span>
-                  <div>
-                    <p className="summary-label">{tr("Ändra", "Edit")}</p>
-                    <p className="summary-value">{tr("Ändra konto", "Change account")}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
             <div className="summary-card">
               <h3>{tr("Astrologi", "Astrology")}</h3>
               <div className="summary-items">
@@ -5770,7 +6556,7 @@ export default function App() {
               <p className="summary-detail">{tarotLoading ? tr("Laddar dagens kort...", "Loading daily card...") : tr("Dagens kort visas här.", "Daily card will appear here.")}</p>
             )}
             {tarotStatus ? <p className="summary-detail">{tarotStatus}</p> : null}
-            <a className="btn-link" href="/tarot/oracle">
+            <a className="btn-link" href={appHref("/tarot/oracle")}>
               {tr("Öppna tarot", "Open Tarot")}
             </a>
           </div>
@@ -5940,7 +6726,10 @@ export default function App() {
                             <div className="friend-meta">
                               <strong>{friendLabel(friend)}</strong>
                               <span>
-                                @{friend.username || friend.user_id} · {localizeMembershipTier(friend.tier)}
+                                @{friend.username || friend.user_id} ·{" "}
+                                {friend.active
+                                  ? localizeMembershipTier(friend.tier)
+                                  : tr("Profil hittad, medlemskap ej aktiverat än", "Profile found, membership not activated yet")}
                               </span>
                             </div>
                             <div className="friend-actions">
@@ -6782,7 +7571,7 @@ export default function App() {
             <header className="madame-intro">
               {!introImageMissing ? (
                 <img
-                  src="/tarot/tarot-introduction.png"
+                  src={appHref("/tarot/tarot-introduction.png")}
                   alt={tr("Madame Flood tarotintroduktion", "Madame Flood tarot introduction")}
                   className="madame-intro-image"
                   onError={() => setIntroImageMissing(true)}
@@ -7320,12 +8109,12 @@ export default function App() {
       {isGamesPage ? (
       <>
         <header className="hero">
-        <p className="eyebrow">CHKN</p>
-        <h1>{tr("Chicken Race", "Chicken Race")}</h1>
+        <p className="eyebrow">STARDOM</p>
+        <h1>{tr("Stardom Lobby", "Stardom Lobby")}</h1>
         <p className="lead">
           {tr(
-            "Realtidsutmaningar. 5-kamp med Yatzy, Black Jack, Trivia, musikquiz och Texas Hold'em. Servern är domare.",
-            "Real-time challenges. Pentathlon with Yatzy, Blackjack, Trivia, music quiz, and Texas Hold'em. The server is the referee."
+            "Astrologi, tarot och kinesisk zodiak i samma nav som dina sociala matcher.",
+            "Astrology, tarot, and Chinese zodiac in the same hub as your social matches."
           )}
         </p>
         <div className="cta-row">
@@ -7407,20 +8196,20 @@ export default function App() {
       </header>
       <section className="cards">
         <article className="card">
-          <h2>{tr("5-kamp", "Pentathlon")}</h2>
-          <p>{tr("Allt ackumuleras i CHKN-poäng. Vinn totalt med smart spel.", "Everything accumulates in CHKN points. Win overall with smart play.")}</p>
+          <h2>{tr("Horoskop", "Horoscope")}</h2>
+          <p>{tr("Fördjupa Sol, Måne och Ascendent med en personlig tolkning.", "Dive into Sun, Moon, and Ascendant with a personal reading.")}</p>
         </article>
         <article className="card">
-          <h2>{tr("Chicken Run", "Chicken Run")}</h2>
-          <p>{tr("Snabb vadslagning för maxad nerv.", "Fast betting for maximum tension.")}</p>
+          <h2>{tr("Kinesisk zodiak", "Chinese zodiac")}</h2>
+          <p>{tr("Läs årsdjur, element och yin/yang som social kompass.", "Read year animal, element, and yin/yang as your social compass.")}</p>
         </article>
         <article className="card">
-          <h2>{tr("Sputnik", "Sputnik")}</h2>
-          <p>{tr("Spela solo mot AI-botten som aldrig blinkar.", "Play solo against the AI bot that never blinks.")}</p>
+          <h2>{tr("Tarot & Oracle", "Tarot & Oracle")}</h2>
+          <p>{tr("Dra kort och få vägledning när du behöver nästa steg.", "Draw cards and get guidance when you need your next step.")}</p>
         </article>
         <article className="card">
-          <h2>{tr("Ytzy", "Ytzy")}</h2>
-          <p>{tr("Eget spel som nu ligger under Chick'n-appen.", "Custom game now running under the Chick'n app.")}</p>
+          <h2>{tr("Yatzy Arena", "Yatzy Arena")}</h2>
+          <p>{tr("Starta Yatzy direkt från Stardom när spelhumöret slår till.", "Launch Yatzy directly from Stardom whenever game mode kicks in.")}</p>
           <a className="btn-link" href={ytzyBase} target="_blank" rel="noreferrer">
             {tr("Öppna Ytzy", "Open Ytzy")}
           </a>
@@ -7587,6 +8376,7 @@ export default function App() {
       </section>
       </>
       ) : null}
-    </main>
+      </main>
+    </>
   );
 }

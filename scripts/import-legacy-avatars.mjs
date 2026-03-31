@@ -8,7 +8,7 @@ const repoRoot = path.resolve(process.cwd(), "../..");
 const envPath = path.join(repoRoot, ".env");
 
 const avatarDirs = [
-  path.join(repoRoot, "services/chkn/apps/web/public/avatars"),
+  path.join(repoRoot, "services/stardom/apps/web/public/avatars"),
   path.join(repoRoot, "services/yatzy/frontend/public/avatars"),
 ];
 

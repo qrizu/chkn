@@ -1,6 +1,15 @@
-FROM node:20-alpine
+FROM node:20-alpine AS build
 
 WORKDIR /app
+
+ARG VITE_API_URL=""
+ARG VITE_YTZY_URL=""
+ARG VITE_BASE_PATH="/"
+ARG VITE_APP_BASE=""
+ENV VITE_API_URL=${VITE_API_URL}
+ENV VITE_YTZY_URL=${VITE_YTZY_URL}
+ENV VITE_BASE_PATH=${VITE_BASE_PATH}
+ENV VITE_APP_BASE=${VITE_APP_BASE}
 
 COPY package.json package-lock.json ./
 COPY apps/web/package.json apps/web/
@@ -9,6 +18,13 @@ RUN npm install
 
 COPY apps/web apps/web
 
-EXPOSE 5173
+RUN npm --workspace apps/web run build
 
-CMD ["npm","--workspace","apps/web","run","dev","--","--host","0.0.0.0","--port","5173"]
+FROM nginx:1.27-alpine
+
+COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/apps/web/dist /usr/share/nginx/html
+
+EXPOSE 8080
+
+CMD ["nginx","-g","daemon off;"]

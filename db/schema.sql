@@ -3,8 +3,8 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
-CREATE SCHEMA IF NOT EXISTS chkn;
-SET search_path TO chkn, public;
+CREATE SCHEMA IF NOT EXISTS stardom;
+SET search_path TO stardom, public;
 
 CREATE TABLE IF NOT EXISTS matches (
   match_id   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -111,14 +111,14 @@ BEGIN
   IF NOT EXISTS (
     SELECT 1
     FROM information_schema.columns
-    WHERE table_schema='chkn' AND table_name='user_profiles' AND column_name='tz_name'
+    WHERE table_schema='stardom' AND table_name='user_profiles' AND column_name='tz_name'
   ) THEN
     ALTER TABLE user_profiles ADD COLUMN tz_name TEXT NULL;
   END IF;
   IF NOT EXISTS (
     SELECT 1
     FROM information_schema.columns
-    WHERE table_schema='chkn' AND table_name='user_profiles' AND column_name='tz_offset_minutes'
+    WHERE table_schema='stardom' AND table_name='user_profiles' AND column_name='tz_offset_minutes'
   ) THEN
     ALTER TABLE user_profiles ADD COLUMN tz_offset_minutes INT NULL;
   END IF;
@@ -345,13 +345,13 @@ RESET search_path;
 -- Permissions
 -- prod DB: sputnet_app (role: yatzy_user)
 -- dev  DB: sputnet_app_dev (role: yatzy_devusr)
-GRANT USAGE ON SCHEMA chkn TO yatzy_user, yatzy_devusr;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA chkn TO yatzy_user, yatzy_devusr;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA chkn TO yatzy_user, yatzy_devusr;
+GRANT USAGE ON SCHEMA stardom TO yatzy_user, yatzy_devusr;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA stardom TO yatzy_user, yatzy_devusr;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA stardom TO yatzy_user, yatzy_devusr;
 
-ALTER DEFAULT PRIVILEGES IN SCHEMA chkn
+ALTER DEFAULT PRIVILEGES IN SCHEMA stardom
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO yatzy_user, yatzy_devusr;
-ALTER DEFAULT PRIVILEGES IN SCHEMA chkn
+ALTER DEFAULT PRIVILEGES IN SCHEMA stardom
   GRANT USAGE, SELECT ON SEQUENCES TO yatzy_user, yatzy_devusr;
 
 COMMIT;

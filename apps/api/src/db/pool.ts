@@ -3,7 +3,7 @@ import pg from "pg";
 const { Pool } = pg;
 
 const url = (process.env.DATABASE_URL || "").trim();
-const schema = (process.env.CHKN_DB_SCHEMA || "chkn").trim() || "chkn";
+const schema = (process.env.CHKN_DB_SCHEMA || "stardom").trim() || "stardom";
 
 function wantSsl(): boolean {
   const v = (process.env.APP_DB_SSL || process.env.PGSSLMODE || process.env.DATABASE_SSL || "")

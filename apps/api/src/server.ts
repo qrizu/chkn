@@ -6,6 +6,7 @@ import { Server } from "socket.io";
 import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 import sharp from "sharp";
+import nodemailer from "nodemailer";
 import { ClientEventSchema } from "../../../packages/shared/schemas";
 import { MatchOrchestrator } from "../../../packages/game-engine/orchestrator";
 import type { ClientEvent, LedgerEntry, Match, MatchMode, MatchPlayer, MatchStatus, Stage } from "../../../packages/shared/events";
@@ -168,26 +169,52 @@ const makeDealerHand = (): BjHand => ({
 const parseJsonBody = async (req: http.IncomingMessage, maxBytes = 1_000_000): Promise<any> => {
   return new Promise((resolve, reject) => {
     let data = "";
+    let receivedBytes = 0;
+    let settled = false;
+
+    const safeReject = (error: unknown) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    };
+
+    const safeResolve = (value: unknown) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+
     req.on("data", (chunk) => {
-      data += chunk;
-      if (data.length > maxBytes) {
-        reject(new Error("payload_too_large"));
+      if (settled) return;
+      const chunkText = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+      receivedBytes += typeof chunk === "string" ? Buffer.byteLength(chunk) : chunk.length;
+      if (receivedBytes > maxBytes) {
+        safeReject(new Error("payload_too_large"));
+        return;
       }
+      data += chunkText;
     });
+
     req.on("end", () => {
-      if (!data.trim()) return resolve(null);
+      if (settled) return;
+      if (!data.trim()) return safeResolve(null);
       try {
-        resolve(JSON.parse(data));
+        safeResolve(JSON.parse(data));
       } catch (err) {
-        reject(err);
+        safeReject(err);
       }
     });
-    req.on("error", reject);
+
+    req.on("error", safeReject);
   });
 };
 
 const AVATAR_UPLOAD_MAX_BYTES = 8_000_000;
 const AVATAR_UPLOAD_PAYLOAD_MAX_BYTES = 12_000_000;
+const REPORT_EMAIL_PAYLOAD_MAX_BYTES = Math.max(
+  10_000_000,
+  Number(process.env.REPORT_EMAIL_PAYLOAD_MAX_BYTES || 60_000_000)
+);
 const avatarPublicDir = path.resolve(process.cwd(), "apps/web/public/avatars");
 const avatarMimeByExtension: Record<string, string> = {
   ".jpg": "image/jpeg",
@@ -206,32 +233,167 @@ let ensureUserAvatarsTablePromise: Promise<void> | null = null;
 
 const ensureUserAvatarsTable = async (): Promise<void> => {
   if (!ensureUserAvatarsTablePromise) {
-    ensureUserAvatarsTablePromise = pool
-      .query(
-        `CREATE TABLE IF NOT EXISTS user_avatars (
+    ensureUserAvatarsTablePromise = (async () => {
+      await pool.query(
+        `CREATE TABLE IF NOT EXISTS public.user_avatars (
            user_id TEXT PRIMARY KEY,
            avatar_mime_type TEXT NOT NULL,
            avatar_data BYTEA NOT NULL,
            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
          )`
-      )
-      .then(() => undefined)
-      .catch(async (err) => {
-        const msg = String((err as Error)?.message || err).toLowerCase();
-        if (msg.includes("permission denied")) {
-          try {
-            const exists = await pool.query(`SELECT to_regclass('chkn.user_avatars') AS t`);
-            if (exists.rows[0]?.t) return;
-          } catch {
-            // fall through to throw original error
-          }
-        }
-        ensureUserAvatarsTablePromise = null;
-        throw err;
-      });
+      );
+
+      const legacy = await pool.query(`SELECT to_regclass('stardom.user_avatars') AS table_name`);
+      if (legacy.rows[0]?.table_name) {
+        await pool.query(
+          `INSERT INTO public.user_avatars (user_id, avatar_mime_type, avatar_data, created_at, updated_at)
+           SELECT
+             user_id,
+             avatar_mime_type,
+             avatar_data,
+             COALESCE(created_at, NOW()),
+             COALESCE(updated_at, NOW())
+           FROM stardom.user_avatars
+           ON CONFLICT (user_id) DO UPDATE
+             SET avatar_mime_type = EXCLUDED.avatar_mime_type,
+                 avatar_data = EXCLUDED.avatar_data,
+                 updated_at = EXCLUDED.updated_at
+           WHERE public.user_avatars.updated_at < EXCLUDED.updated_at`
+        );
+      }
+    })().catch((err) => {
+      const msg = String((err as Error)?.message || err).toLowerCase();
+      if (msg.includes("permission denied")) {
+        ensureUserAvatarsTablePromise = Promise.resolve();
+        return;
+      }
+      ensureUserAvatarsTablePromise = null;
+      throw err;
+    });
   }
   return ensureUserAvatarsTablePromise;
+};
+
+const sanitizeAccountValue = (value: unknown, maxLen: number): string | null => {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  return text.length > maxLen ? text.slice(0, maxLen) : text;
+};
+
+const sanitizeEmailValue = (value: unknown): string | null => {
+  const email = sanitizeAccountValue(value, 320);
+  if (!email) return null;
+  return isValidEmail(email) ? email : null;
+};
+
+type SharedUserRow = {
+  id: string;
+  provider: string | null;
+  external_id: string | null;
+  email: string | null;
+  username: string | null;
+  name: string | null;
+  player_code: string | null;
+};
+
+const normalizeSharedUserRow = (row: any): SharedUserRow | null => {
+  if (!row) return null;
+  return {
+    id: String(row.id ?? ""),
+    provider: row.provider ? String(row.provider) : null,
+    external_id: row.external_id ? String(row.external_id) : null,
+    email: row.email ? String(row.email) : null,
+    username: row.username ? String(row.username) : null,
+    name: row.name ? String(row.name) : null,
+    player_code: row.player_code ? String(row.player_code) : null,
+  };
+};
+
+const buildSharedUserSeed = (
+  headers: Record<string, string>,
+  userInfo?: { username?: string | null; email?: string | null; name?: string | null } | null
+) => ({
+  provider: "authentik",
+  externalId: sanitizeAccountValue(headers["x-authentik-uid"], 128),
+  email: sanitizeEmailValue(userInfo?.email ?? headers["x-authentik-email"] ?? null),
+  username: sanitizeAccountValue(userInfo?.username ?? headers["x-authentik-username"] ?? null, 128),
+  name: sanitizeAccountValue(userInfo?.name ?? headers["x-authentik-name"] ?? null, 128),
+});
+
+const loadSharedUserByExternalId = async (externalId: string | null): Promise<SharedUserRow | null> => {
+  const cleanExternalId = sanitizeAccountValue(externalId, 128);
+  if (!cleanExternalId) return null;
+  const result = await pool.query(
+    `SELECT id::text, provider, external_id, email, username, name, player_code
+     FROM public.users
+     WHERE provider = 'authentik' AND external_id = $1
+     LIMIT 1`,
+    [cleanExternalId]
+  );
+  return normalizeSharedUserRow(result.rows[0]);
+};
+
+const ensureSharedUserRecord = async (
+  headers: Record<string, string>,
+  userInfo?: { username?: string | null; email?: string | null; name?: string | null } | null
+): Promise<SharedUserRow | null> => {
+  const seed = buildSharedUserSeed(headers, userInfo);
+  if (!seed.externalId) return null;
+  const result = await pool.query(
+    `INSERT INTO public.users (provider, external_id, email, username, name)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (provider, external_id) DO UPDATE
+       SET email = COALESCE(NULLIF(public.users.email, ''), EXCLUDED.email),
+           username = COALESCE(NULLIF(public.users.username, ''), EXCLUDED.username),
+           name = COALESCE(NULLIF(public.users.name, ''), EXCLUDED.name)
+     RETURNING id::text, provider, external_id, email, username, name, player_code`,
+    [seed.provider, seed.externalId, seed.email, seed.username, seed.name]
+  );
+  return normalizeSharedUserRow(result.rows[0]);
+};
+
+const updateSharedUserProfile = async (
+  externalId: string | null,
+  patch: { email?: string | null; username?: string | null; name?: string | null }
+): Promise<SharedUserRow | null> => {
+  const cleanExternalId = sanitizeAccountValue(externalId, 128);
+  if (!cleanExternalId) return null;
+  const result = await pool.query(
+    `UPDATE public.users
+     SET email = $2,
+         username = $3,
+         name = $4
+     WHERE provider = 'authentik' AND external_id = $1
+     RETURNING id::text, provider, external_id, email, username, name, player_code`,
+    [
+      cleanExternalId,
+      sanitizeEmailValue(patch.email ?? null),
+      sanitizeAccountValue(patch.username ?? null, 128),
+      sanitizeAccountValue(patch.name ?? null, 128),
+    ]
+  );
+  return normalizeSharedUserRow(result.rows[0]);
+};
+
+const avatarLookupCandidates = (values: Array<string | null | undefined>): string[] =>
+  Array.from(new Set(values.map((value) => sanitizeAccountValue(value, 256)).filter(Boolean) as string[]));
+
+const resolveSharedAvatarCandidates = async (
+  userId: string | null,
+  username: string | null
+): Promise<string[]> => {
+  const sharedUser = await loadSharedUserByExternalId(userId);
+  return avatarLookupCandidates([
+    userId,
+    sharedUser?.external_id,
+    sharedUser?.username,
+    sharedUser?.player_code,
+    ...avatarStemCandidates(username ?? ""),
+    ...avatarStemCandidates(sharedUser?.username ?? ""),
+    ...avatarStemCandidates(sharedUser?.name ?? ""),
+    ...avatarStemCandidates(sharedUser?.player_code ?? ""),
+  ]);
 };
 
 const parseImageDataUrl = (value: string): { mimeType: string; buffer: Buffer } | null => {
@@ -275,14 +437,6 @@ const avatarStemCandidates = (username: string): string[] => {
   return Array.from(new Set([stem, stem.toLowerCase(), titleCase]));
 };
 
-const avatarLookupCandidates = (userId: string | null, username: string | null): string[] => {
-  const out: string[] = [];
-  const uid = String(userId || "").trim();
-  if (uid) out.push(uid);
-  if (username) out.push(...avatarStemCandidates(username));
-  return Array.from(new Set(out));
-};
-
 const loadAvatarFromDbCandidates = async (
   candidates: string[]
 ): Promise<{ mimeType: string; buffer: Buffer } | null> => {
@@ -290,7 +444,7 @@ const loadAvatarFromDbCandidates = async (
   await ensureUserAvatarsTable();
   const avatarResult = await pool.query(
     `SELECT user_id, avatar_mime_type, avatar_data
-     FROM user_avatars
+     FROM public.user_avatars
      WHERE user_id = ANY($1::text[])
      ORDER BY array_position($1::text[], user_id)
      LIMIT 1`,
@@ -592,7 +746,19 @@ const getTarotExpiresAt = (now: Date, timeZone: string): Date => {
 const getRequestLocale = (req: http.IncomingMessage): string => {
   try {
     const requestUrl = new URL(req.url || "/", "http://localhost");
-    return String(requestUrl.searchParams.get("lang") || "").trim() || "en-US";
+    const queryLocale = String(requestUrl.searchParams.get("lang") || "").trim();
+    if (queryLocale) return queryLocale;
+    const explicitHeader = String(req.headers["x-stardom-locale"] || "").trim();
+    if (explicitHeader) return explicitHeader;
+    const acceptLanguage = String(req.headers["accept-language"] || "").trim();
+    if (acceptLanguage) {
+      const preferred = acceptLanguage
+        .split(",")
+        .map((part) => part.split(";")[0]?.trim())
+        .find(Boolean);
+      if (preferred) return preferred;
+    }
+    return "en-US";
   } catch {
     return "en-US";
   }
@@ -659,6 +825,539 @@ const fetchAuthentikUserInfo = async (headers: Record<string, string>) => {
   } catch {
     return null;
   }
+};
+
+const escapeHtml = (value: unknown): string =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+const normalizeRecipientEmail = (value: unknown): string => String(value ?? "").trim();
+
+const isValidEmail = (value: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+
+const normalizeAbsoluteUrl = (value: unknown): string => {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  try {
+    return new URL(raw).toString();
+  } catch {
+    return "";
+  }
+};
+
+const formatReportDate = (value: unknown, locale: string): string => {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  const date = new Date(raw);
+  if (!Number.isFinite(date.getTime())) return raw;
+  try {
+    return new Intl.DateTimeFormat(locale || "en-US", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(date);
+  } catch {
+    return date.toISOString();
+  }
+};
+
+const formatOrbValue = (value: unknown): string => {
+  const orb = Number(value);
+  return Number.isFinite(orb) ? orb.toFixed(1) : "—";
+};
+
+let mailTransportPromise: Promise<nodemailer.Transporter> | null = null;
+
+const getFirstEnv = (...keys: string[]): string => {
+  for (const key of keys) {
+    const value = String(process.env[key] || "").trim();
+    if (value) return value;
+  }
+  return "";
+};
+
+const parseEnvBool = (...keys: string[]): boolean => /^(1|true|yes|on)$/i.test(getFirstEnv(...keys));
+
+const normalizeMailPassword = (host: string, value: unknown): string => {
+  const raw = String(value || "");
+  const trimmed = raw.trim();
+  // Google app passwords are often copied as 4 groups with spaces.
+  if (/gmail\.com/i.test(host) && /^[a-z0-9]{4}( [a-z0-9]{4}){3}$/i.test(trimmed)) {
+    return trimmed.replace(/\s+/g, "");
+  }
+  return trimmed;
+};
+
+const getMailErrorCode = (error: unknown): string => {
+  if (!error || typeof error !== "object" || !("code" in error)) return "";
+  return String((error as { code?: unknown }).code || "").trim().toUpperCase();
+};
+
+const getMailErrorResponse = (error: unknown): string => {
+  if (!error || typeof error !== "object" || !("response" in error)) return "";
+  return String((error as { response?: unknown }).response || "").trim();
+};
+
+const getMailErrorMeta = (error: unknown) => {
+  const message =
+    error instanceof Error ? error.message : typeof error === "string" ? error : String(error ?? "");
+  const code = getMailErrorCode(error);
+  const response = getMailErrorResponse(error);
+  const combined = `${message}\n${response}`;
+  const notConfigured = combined.includes("mail_not_configured");
+  const authFailed =
+    code === "EAUTH" || /badcredentials|username and password not accepted|authentication failed/i.test(combined);
+  return { message, code, response, notConfigured, authFailed };
+};
+
+const getReportEmailErrorPayload = (error: unknown, locale: string) => {
+  const meta = getMailErrorMeta(error);
+  if (meta.notConfigured) {
+    return {
+      status: 503,
+      error: "mail_not_configured",
+      message: localeText(
+        locale,
+        "E-post är inte konfigurerat i backend ännu.",
+        "Email is not configured in the backend yet."
+      ),
+      details: meta.message,
+    };
+  }
+  if (meta.authFailed) {
+    return {
+      status: 503,
+      error: "mail_auth_failed",
+      message: localeText(
+        locale,
+        "Backendens e-postinloggning misslyckades. MAIL_USERNAME eller MAIL_PASSWORD behöver rättas.",
+        "The backend email login failed. MAIL_USERNAME or MAIL_PASSWORD needs to be fixed."
+      ),
+      details: meta.response || meta.message,
+    };
+  }
+  return {
+    status: 500,
+    error: "mail_send_failed",
+    message: localeText(
+      locale,
+      "Kunde inte skicka HTML-e-post just nu.",
+      "Could not send the HTML email right now."
+    ),
+    details: meta.response || meta.message,
+  };
+};
+
+const getMailTransport = async (): Promise<nodemailer.Transporter> => {
+  const host = getFirstEnv("AUTHENTIK_EMAIL__HOST", "MAIL_HOST");
+  const port = Number(getFirstEnv("AUTHENTIK_EMAIL__PORT", "MAIL_PORT") || 0);
+  const user = getFirstEnv("AUTHENTIK_EMAIL__USERNAME", "MAIL_USERNAME");
+  const pass = normalizeMailPassword(host, getFirstEnv("AUTHENTIK_EMAIL__PASSWORD", "MAIL_PASSWORD"));
+  const secure =
+    parseEnvBool("AUTHENTIK_EMAIL__USE_SSL") ||
+    /^(ssl|smtps)$/i.test(getFirstEnv("MAIL_ENCRYPTION")) ||
+    port === 465;
+  const requireTLS =
+    !secure &&
+    (parseEnvBool("AUTHENTIK_EMAIL__USE_TLS") || /^(tls|starttls)$/i.test(getFirstEnv("MAIL_ENCRYPTION")));
+  if (!host || !Number.isFinite(port) || port <= 0 || !user || !pass) {
+    throw new Error("mail_not_configured");
+  }
+  if (!mailTransportPromise) {
+    mailTransportPromise = (async () => {
+      const transporter = nodemailer.createTransport({
+        host,
+        port,
+        secure,
+        requireTLS,
+        auth: { user, pass },
+      });
+      await transporter.verify();
+      return transporter;
+    })().catch((error) => {
+      mailTransportPromise = null;
+      throw error;
+    });
+  }
+  return mailTransportPromise;
+};
+
+const getMailSender = () => {
+  const address = getFirstEnv("AUTHENTIK_EMAIL__FROM", "MAIL_FROM_ADDRESS", "AUTHENTIK_EMAIL__USERNAME", "MAIL_USERNAME");
+  const name = String(process.env.MAIL_FROM_NAME || "STARDOM").trim() || "STARDOM";
+  if (!address) throw new Error("mail_not_configured");
+  return { address, name };
+};
+
+const normalizeReportEmailHtml = (value: unknown): string => {
+  const html = String(value || "").trim();
+  if (!html) return "";
+  return html
+    .replace(/<script\b[\s\S]*?<\/script>/gi, "")
+    .replace(/\snonce="[^"]*"/gi, "")
+    .trim();
+};
+
+const normalizeReportEmailFilename = (value: unknown): string => {
+  const raw = String(value || "").trim().replace(/[\\/:*?"<>|]+/g, "-");
+  const normalized = raw.replace(/\s+/g, "-").replace(/-+/g, "-").replace(/^-+|-+$/g, "");
+  if (!normalized) return "full_natalanalysrapport.html";
+  return normalized.toLowerCase().endsWith(".html") ? normalized : `${normalized}.html`;
+};
+
+const buildNatalReportEmail = ({
+  data,
+  reportUrl,
+  reportPrintUrl,
+  locale,
+}: {
+  data: any;
+  reportUrl: string;
+  reportPrintUrl: string;
+  locale: string;
+}) => {
+  const safeLocale = String(locale || "en-US").trim() || "en-US";
+  const userName = String(data?.user?.name || data?.user?.username || "STARDOM Member").trim() || "STARDOM Member";
+  const generatedAt = formatReportDate(data?.generatedAt, safeLocale);
+  const birthDate = String(data?.user?.birthDate || "").trim();
+  const birthTime = String(data?.user?.birthTime || "").trim();
+  const birthPlace = String(data?.user?.birthPlace || "").trim();
+  const rawAvatarUrl = String(data?.user?.avatarUrl || "").trim();
+  const avatarUrl = rawAvatarUrl.startsWith("data:") ? rawAvatarUrl : normalizeAbsoluteUrl(rawAvatarUrl);
+  const astrology = data?.astrology ?? {};
+  const humanDesign = data?.humanDesign ?? {};
+  const chineseZodiac = data?.chineseZodiac ?? {};
+  const isSwedish = /^sv(?:-|$)/i.test(safeLocale);
+  const signSv: Record<string, string> = {
+    Aries: "Väduren",
+    Taurus: "Oxen",
+    Gemini: "Tvillingarna",
+    Cancer: "Kräftan",
+    Leo: "Lejonet",
+    Virgo: "Jungfrun",
+    Libra: "Vågen",
+    Scorpio: "Skorpionen",
+    Sagittarius: "Skytten",
+    Capricorn: "Stenbocken",
+    Aquarius: "Vattumannen",
+    Pisces: "Fiskarna",
+  };
+  const zodiacAnimalSv: Record<string, string> = {
+    Rat: "Råttan",
+    Ox: "Oxen",
+    Tiger: "Tigern",
+    Rabbit: "Kaninen",
+    Dragon: "Draken",
+    Snake: "Ormen",
+    Horse: "Hästen",
+    Goat: "Geten",
+    Monkey: "Apan",
+    Rooster: "Tuppen",
+    Dog: "Hunden",
+    Pig: "Grisen",
+  };
+  const localizeSign = (value: unknown): string => {
+    const raw = String(value || "").trim();
+    if (!raw) return "—";
+    return isSwedish ? signSv[raw] || raw : raw;
+  };
+  const localizeZodiacAnimal = (value: unknown): string => {
+    const raw = String(value || "").trim();
+    if (!raw) return "—";
+    return isSwedish ? zodiacAnimalSv[raw] || raw : raw;
+  };
+  const shortBirthPlace = (() => {
+    if (!birthPlace) return "";
+    const parts = birthPlace
+      .split(",")
+      .map((part: string) => part.trim())
+      .filter(Boolean);
+    if (parts.length <= 1) return birthPlace;
+    const first = parts[0];
+    let last = parts[parts.length - 1];
+    while (parts.length > 1 && /^\d[\d\s-]*$/.test(last)) {
+      parts.pop();
+      last = parts[parts.length - 1] || "";
+    }
+    return last && first.toLowerCase() !== last.toLowerCase() ? `${first}, ${last}` : first;
+  })();
+
+  const sunDisplay = localizeSign(astrology?.sun);
+  const moonDisplay = localizeSign(astrology?.moon);
+  const ascDisplay = localizeSign(astrology?.ascendant);
+  const hdType = String(humanDesign?.role || humanDesign?.type || "").trim() || "—";
+  const hdAuthority = String(humanDesign?.authority || "").trim() || "—";
+  const zodiacAnimalDisplay = localizeZodiacAnimal(chineseZodiac?.animal);
+  const birthLine = [birthDate, birthTime, shortBirthPlace].filter(Boolean).join(" · ") || "—";
+  const coreSignature = [sunDisplay, hdType, zodiacAnimalDisplay].filter((value) => value && value !== "—").join(" · ") || "—";
+
+  const intro = localeText(
+    safeLocale,
+    "En metodisk sammanställning baserad på Astrologi, Human Design och den Kinesiska Zodiaken.",
+    "A methodical summary based on Astrology, Human Design, and the Chinese Zodiac."
+  );
+  const dedication = localeText(
+    safeLocale,
+    `Tillägnad ${userName} som en guide i livet.`,
+    `Dedicated to ${userName} as a guide in life.`
+  );
+  const coreSubtitle = localeText(
+    safeLocale,
+    "Tre nycklar som formar hur du känner, väljer och blir upplevd.",
+    "Three keys that shape how you feel, choose, and are perceived."
+  );
+  const attachmentHint = localeText(
+    safeLocale,
+    "Fortsättningen finns i den bifogade fulla HTML-rapporten.",
+    "The full continuation is in the attached HTML report."
+  );
+  const subject = localeText(
+    safeLocale,
+    `Natalanalysrapport för ${userName}`,
+    `Natal Analysis Report for ${userName}`
+  );
+
+  const heroNarrative = localeText(
+    safeLocale,
+    `${userName} bär en karta där Sol, Måne och Ascendent tecknar riktningen. Tillsammans med ${zodiacAnimalDisplay.toLowerCase()}ns kreativa känslighet och Human Design-signaturen skapas en personlig kompass för relationer, arbete och livsval.`,
+    `${userName} carries a map where Sun, Moon, and Ascendant shape direction. Together with the creative sensitivity of ${zodiacAnimalDisplay.toLowerCase()} and the Human Design signature, it forms a personal compass for relationships, work, and life choices.`
+  );
+  const coreNarrative = localeText(
+    safeLocale,
+    `${userName} bär en Sol i ${sunDisplay}, en Måne i ${moonDisplay} och en Ascendent i ${ascDisplay}. Tillsammans ger de en signatur där vilja, känsla och uttryck möts i samma berättelse. Human Design-typen ${hdType} med auktoriteten ${hdAuthority} visar hur beslut blir mest sanna i praktiken. I bakgrunden färgar årsdjuret ${zodiacAnimalDisplay} ditt sociala grundtempo.`,
+    `${userName} carries a Sun in ${sunDisplay}, a Moon in ${moonDisplay}, and an Ascendant in ${ascDisplay}. Together they form a signature where will, feeling, and expression meet in one story. Human Design type ${hdType} with authority ${hdAuthority} shows how decisions become most aligned in practice. In the background, the zodiac animal ${zodiacAnimalDisplay} colors your social baseline tempo.`
+  );
+  const pill = (value: string, tone: "blue" | "violet" | "green" = "blue") => {
+    const tones =
+      tone === "violet"
+        ? { bg: "#4b3568", border: "#7f63a8", text: "#f2eafe" }
+        : tone === "green"
+          ? { bg: "#2f524a", border: "#5da88f", text: "#e9fff7" }
+          : { bg: "#294766", border: "#5c9fd2", text: "#e9f5ff" };
+    return `<span style="display:inline-block;padding:2px 9px;border-radius:999px;background:${tones.bg};border:1px solid ${tones.border};color:${tones.text};font-weight:700;line-height:1.45;">${escapeHtml(
+      value
+    )}</span>`;
+  };
+
+  const html = `<!doctype html>
+<html lang="${escapeHtml(safeLocale)}">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${escapeHtml(subject)}</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f4ecdf;color:#241a12;font-family:Georgia,'Times New Roman',serif;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;background:#f4ecdf;">
+      <tr>
+        <td align="center" style="padding:20px 12px 32px;">
+          <table role="presentation" width="680" cellspacing="0" cellpadding="0" style="width:100%;max-width:680px;border-collapse:collapse;">
+            <tr>
+              <td style="background:linear-gradient(135deg,#1a263b 0%,#15132a 58%,#2c2216 100%);border:1px solid #3d4f72;border-radius:28px;padding:24px 22px;color:#f0e8d9;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
+                  <tr>
+                    <td valign="top" style="padding:0 12px 0 0;">
+                      <p style="margin:0 0 10px;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:#f0c88f;">SPUTNET WORLD</p>
+                      <h1 style="margin:0 0 12px;font-size:42px;line-height:1.05;color:#f0e8d9;">${escapeHtml(
+                        localeText(safeLocale, "Natalanalysrapport", "Natal Analysis Report")
+                      )}</h1>
+                      <p style="margin:0 0 10px;font-size:18px;line-height:1.55;color:#f0e8d9;">${escapeHtml(intro)}</p>
+                      <p style="margin:0 0 14px;font-size:30px;line-height:1.3;color:#f0e8d9;font-weight:700;">${escapeHtml(dedication)}</p>
+                    </td>
+                    ${
+                      avatarUrl
+                        ? `<td valign="top" align="right" style="width:126px;padding:0 0 0 10px;">
+                            <img src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(
+                            localeText(safeLocale, "Profilbild", "Profile image")
+                          )}" width="116" style="display:block;width:116px;max-width:116px;height:auto;border-radius:16px;border:1px solid rgba(255,255,255,0.3);" />
+                          </td>`
+                        : ""
+                    }
+                  </tr>
+                </table>
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-top:10px;">
+                  <tr>
+                    <td valign="top" style="width:50%;padding:6px;">
+                      <div style="background:rgba(12,18,33,0.45);border:1px solid rgba(186,198,225,0.35);border-radius:16px;padding:12px 14px;">
+                        <div style="font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:#d8cdbf;margin-bottom:4px;">${escapeHtml(
+                          localeText(safeLocale, "Namn", "Name")
+                        )}</div>
+                        <div style="font-size:22px;font-weight:700;line-height:1.35;color:#f0e8d9;">${escapeHtml(userName)}</div>
+                      </div>
+                    </td>
+                    <td valign="top" style="width:50%;padding:6px;">
+                      <div style="background:rgba(12,18,33,0.45);border:1px solid rgba(186,198,225,0.35);border-radius:16px;padding:12px 14px;">
+                        <div style="font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:#d8cdbf;margin-bottom:4px;">${escapeHtml(
+                          localeText(safeLocale, "Födelsedata", "Birth data")
+                        )}</div>
+                        <div style="font-size:20px;font-weight:700;line-height:1.45;color:#f0e8d9;">${escapeHtml(birthLine)}</div>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td valign="top" style="width:50%;padding:6px;">
+                      <div style="background:rgba(12,18,33,0.45);border:1px solid rgba(186,198,225,0.35);border-radius:16px;padding:12px 14px;">
+                        <div style="font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:#d8cdbf;margin-bottom:4px;">${escapeHtml(
+                          localeText(safeLocale, "Kärnsignatur", "Core signature")
+                        )}</div>
+                        <div style="font-size:20px;font-weight:700;line-height:1.45;color:#f0e8d9;">${escapeHtml(coreSignature)}</div>
+                      </div>
+                    </td>
+                    <td valign="top" style="width:50%;padding:6px;">
+                      <div style="background:rgba(12,18,33,0.45);border:1px solid rgba(186,198,225,0.35);border-radius:16px;padding:12px 14px;">
+                        <div style="font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:#d8cdbf;margin-bottom:4px;">${escapeHtml(
+                          localeText(safeLocale, "Skapad", "Created")
+                        )}</div>
+                        <div style="font-size:20px;font-weight:700;line-height:1.45;color:#f0e8d9;">${escapeHtml(generatedAt || "—")}</div>
+                      </div>
+                    </td>
+                  </tr>
+                </table>
+                <div style="margin-top:12px;background:rgba(10,14,24,0.55);border-left:5px solid #f1b347;border-radius:14px;padding:14px 14px;">
+                  <p style="margin:0;font-size:19px;line-height:1.7;color:#f0e8d9;">
+                    ${escapeHtml(heroNarrative)}
+                  </p>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding-top:16px;">
+                <div style="background:linear-gradient(135deg,#102a47 0%,#121330 58%,#2f2517 100%);border:1px solid #3f5a7e;border-radius:24px;padding:20px 20px;">
+                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
+                    <tr>
+                      <td valign="top" style="padding-right:10px;">
+                        <p style="margin:0;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:#b8cde6;">${escapeHtml(
+                          localeText(safeLocale, "Kärna", "Core")
+                        )}</p>
+                        <h2 style="margin:6px 0 0;font-size:36px;line-height:1.1;color:#f0e8d9;">${escapeHtml(
+                          localeText(safeLocale, "Din kosmiska grundton", "Your cosmic baseline")
+                        )}</h2>
+                      </td>
+                      <td valign="top" align="right" style="width:245px;">
+                        <p style="margin:8px 0 0;font-size:18px;line-height:1.5;color:#f0e8d9;">${escapeHtml(coreSubtitle)}</p>
+                      </td>
+                    </tr>
+                  </table>
+                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-top:10px;">
+                    <tr>
+                      <td valign="top" style="width:33.33%;padding:6px;">
+                        <div style="background:rgba(15,17,46,0.66);border:1px solid #f1b347;border-radius:18px;padding:14px 14px;height:100%;">
+                          <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#f1d5a0;margin-bottom:6px;">${escapeHtml(
+                            localeText(safeLocale, "Solen", "Sun")
+                          )}</div>
+                          <div style="font-size:28px;font-weight:700;color:#f0e8d9;line-height:1.35;">${escapeHtml(sunDisplay)}</div>
+                        </div>
+                      </td>
+                      <td valign="top" style="width:33.33%;padding:6px;">
+                        <div style="background:rgba(15,17,46,0.66);border:1px solid #5da8de;border-radius:18px;padding:14px 14px;height:100%;">
+                          <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#bfdff8;margin-bottom:6px;">${escapeHtml(
+                            localeText(safeLocale, "Månen", "Moon")
+                          )}</div>
+                          <div style="font-size:28px;font-weight:700;color:#f0e8d9;line-height:1.35;">${escapeHtml(moonDisplay)}</div>
+                        </div>
+                      </td>
+                      <td valign="top" style="width:33.33%;padding:6px;">
+                        <div style="background:rgba(15,17,46,0.66);border:1px solid #69c7aa;border-radius:18px;padding:14px 14px;height:100%;">
+                          <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#c8f5e7;margin-bottom:6px;">${escapeHtml(
+                            localeText(safeLocale, "Ascendent", "Ascendant")
+                          )}</div>
+                          <div style="font-size:28px;font-weight:700;color:#f0e8d9;line-height:1.35;">${escapeHtml(ascDisplay)}</div>
+                        </div>
+                      </td>
+                    </tr>
+                  </table>
+                  <div style="margin-top:10px;background:rgba(12,16,30,0.58);border:1px solid #5ca4d8;border-radius:16px;padding:14px;">
+                    <p style="margin:0;font-size:18px;line-height:1.75;color:#f0e8d9;">
+                      ${escapeHtml(userName)} bär en ${pill(localeText(safeLocale, "Sol", "Sun"), "blue")} ${pill(sunDisplay, "blue")},
+                      en ${pill(localeText(safeLocale, "Måne", "Moon"), "blue")} ${pill(moonDisplay, "blue")}
+                      och en ${pill(localeText(safeLocale, "Ascendent", "Ascendant"), "blue")} ${pill(ascDisplay, "blue")}.
+                      ${escapeHtml(
+                        localeText(
+                          safeLocale,
+                          "Tillsammans ger de en signatur där vilja, känsla och uttryck möts i samma berättelse.",
+                          "Together they form a signature where will, feeling, and expression meet in one story."
+                        )
+                      )}
+                      ${pill(localeText(safeLocale, "Human Design-typen", "Human Design type"), "violet")} ${pill(hdType, "violet")}
+                      ${escapeHtml(localeText(safeLocale, "med auktoriteten", "with authority"))} ${pill(hdAuthority, "violet")}
+                      ${escapeHtml(
+                        localeText(
+                          safeLocale,
+                          "visar hur beslut blir mest sanna i praktiken. I bakgrunden färgar årsdjuret",
+                          "shows how decisions become most aligned in practice. In the background, the zodiac animal"
+                        )
+                      )}
+                      ${pill(zodiacAnimalDisplay, "green")}
+                      ${escapeHtml(
+                        localeText(
+                          safeLocale,
+                          "ditt sociala grundtempo.",
+                          "colors your social baseline tempo."
+                        )
+                      )}
+                    </p>
+                  </div>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding-top:14px;">
+                <p style="margin:0;text-align:center;font-size:14px;line-height:1.55;color:#6b5a49;">
+                  ${escapeHtml(attachmentHint)}
+                  ${
+                    reportUrl
+                      ? ` <a href="${escapeHtml(reportUrl)}" style="color:#6b5a49;font-weight:700;">${escapeHtml(
+                          localeText(safeLocale, "Öppna full rapport online", "Open full report online")
+                        )}</a>`
+                      : ""
+                  }
+                  ${
+                    reportPrintUrl
+                      ? ` · <a href="${escapeHtml(reportPrintUrl)}" style="color:#6b5a49;">${escapeHtml(
+                          localeText(safeLocale, "Utskriftsvänlig version", "Print-friendly version")
+                        )}</a>`
+                      : ""
+                  }
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+
+  const text = [
+    subject,
+    "",
+    intro,
+    "",
+    dedication,
+    "",
+    `${localeText(safeLocale, "Födelsedata", "Birth data")}: ${birthLine}`,
+    `${localeText(safeLocale, "Solen", "Sun")}: ${sunDisplay}`,
+    `${localeText(safeLocale, "Månen", "Moon")}: ${moonDisplay}`,
+    `${localeText(safeLocale, "Ascendent", "Ascendant")}: ${ascDisplay}`,
+    `${localeText(safeLocale, "Human Design", "Human Design")}: ${hdType}`,
+    `${localeText(safeLocale, "Auktoritet", "Authority")}: ${hdAuthority}`,
+    `${localeText(safeLocale, "Kinesiskt tecken", "Chinese Zodiac")}: ${zodiacAnimalDisplay}`,
+    "",
+    heroNarrative,
+    "",
+    coreNarrative,
+    "",
+    attachmentHint,
+    reportUrl ? `${localeText(safeLocale, "Full rapport online", "Full report online")}: ${reportUrl}` : "",
+    reportPrintUrl ? `${localeText(safeLocale, "Utskriftsversion", "Print version")}: ${reportPrintUrl}` : "",
+    reportUrl ? `${localeText(safeLocale, "Full rapport", "Full report")}: ${reportUrl}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return { subject, html, text };
 };
 
 const normalizeMembershipCode = (value: unknown): string =>
@@ -809,27 +1508,53 @@ const getMembershipRow = async (userId: string) => {
   return result.rowCount ? result.rows[0] : null;
 };
 
-const membershipHasAiAccess = (membership: any): boolean =>
-  Boolean(membership?.active && membership?.ai_access && membership?.tier && membership.tier !== "free");
-
-const syncMembershipIdentity = async (userId: string, headers: Record<string, string>) => {
+const upsertMembershipIdentity = async (
+  userId: string,
+  identity: { username?: string | null; displayName?: string | null; email?: string | null }
+) => {
   await ensureMembershipTables();
-  const userInfo = await fetchAuthentikUserInfo(headers);
-  const username = String(userInfo?.username ?? headers["x-authentik-username"] ?? "").trim() || null;
-  const displayName = String(userInfo?.name ?? headers["x-authentik-name"] ?? "").trim() || null;
-  const email = String(userInfo?.email ?? headers["x-authentik-email"] ?? "").trim() || null;
+  const username = sanitizeAccountValue(identity.username ?? null, 128);
+  const displayName = sanitizeAccountValue(identity.displayName ?? null, 128);
+  const email = sanitizeEmailValue(identity.email ?? null);
   await pool.query(
     `INSERT INTO user_memberships (user_id, username, display_name, email)
      VALUES ($1, $2, $3, $4)
      ON CONFLICT (user_id)
      DO UPDATE SET
-       username = COALESCE(EXCLUDED.username, user_memberships.username),
-       display_name = COALESCE(EXCLUDED.display_name, user_memberships.display_name),
-       email = COALESCE(EXCLUDED.email, user_memberships.email),
+       username = COALESCE(NULLIF(EXCLUDED.username, ''), user_memberships.username),
+       display_name = COALESCE(NULLIF(EXCLUDED.display_name, ''), user_memberships.display_name),
+       email = COALESCE(NULLIF(EXCLUDED.email, ''), user_memberships.email),
        updated_at = NOW()`,
-    [userId, username, displayName, email]
+    [userId, username || null, displayName || null, email || null]
   );
   return getMembershipRow(userId);
+};
+
+const membershipHasAiAccess = (membership: any): boolean =>
+  Boolean(membership?.active && membership?.ai_access && membership?.tier && membership.tier !== "free");
+
+const syncMembershipIdentity = async (userId: string, headers: Record<string, string>) => {
+  const userInfo = await fetchAuthentikUserInfo(headers);
+  const sharedUser = await ensureSharedUserRecord(headers, userInfo);
+  return upsertMembershipIdentity(userId, {
+    username: sharedUser?.username ?? userInfo?.username ?? headers["x-authentik-username"] ?? null,
+    displayName: sharedUser?.name ?? userInfo?.name ?? headers["x-authentik-name"] ?? null,
+    email: sharedUser?.email ?? userInfo?.email ?? headers["x-authentik-email"] ?? null,
+  });
+};
+
+const ensureMembershipRecordForUser = async (userId: string | null): Promise<any | null> => {
+  const cleanUserId = sanitizeAccountValue(userId, 128);
+  if (!cleanUserId) return null;
+  const existing = await getMembershipRow(cleanUserId);
+  if (existing) return existing;
+  const sharedUser = await loadSharedUserByExternalId(cleanUserId);
+  if (!sharedUser) return null;
+  return upsertMembershipIdentity(cleanUserId, {
+    username: sharedUser.username,
+    displayName: sharedUser.name,
+    email: sharedUser.email,
+  });
 };
 
 const areAcceptedFriends = async (leftUserId: string, rightUserId: string): Promise<boolean> => {
@@ -885,6 +1610,72 @@ const CHINESE_TRINES: Record<string, string> = {
   Rabbit: "heart",
   Goat: "heart",
   Pig: "heart",
+};
+
+const ASTRO_SIGN_SV: Record<string, string> = {
+  Aries: "Väduren",
+  Taurus: "Oxen",
+  Gemini: "Tvillingarna",
+  Cancer: "Kräftan",
+  Leo: "Lejonet",
+  Virgo: "Jungfrun",
+  Libra: "Vågen",
+  Scorpio: "Skorpionen",
+  Sagittarius: "Skytten",
+  Capricorn: "Stenbocken",
+  Aquarius: "Vattumannen",
+  Pisces: "Fiskarna",
+};
+
+const CHINESE_ZODIAC_SV: Record<string, string> = {
+  Rat: "Råttan",
+  Ox: "Oxen",
+  Tiger: "Tigern",
+  Rabbit: "Kaninen",
+  Dragon: "Draken",
+  Snake: "Ormen",
+  Horse: "Hästen",
+  Goat: "Geten",
+  Monkey: "Apen",
+  Rooster: "Tuppen",
+  Dog: "Hunden",
+  Pig: "Grisen",
+};
+
+const HUMAN_DESIGN_SV: Record<string, string> = {
+  Projector: "Projektor",
+  Generator: "Generator",
+  "Manifesting Generator": "Manifesting Generator",
+  Manifestor: "Manifestor",
+  Reflector: "Reflektor",
+  "Emotional Authority": "Emotionell auktoritet",
+  "Sacral Authority": "Sakral auktoritet",
+  "Splenic Authority": "Mjältautoritet",
+  "Ego Authority": "Ego-auktoritet",
+  "Self Projected Authority": "Självprojicerad auktoritet",
+  "Mental Authority": "Mental auktoritet",
+  "Lunar Authority": "Lunar auktoritet",
+  "Wait for the Invitation": "Vänta på inbjudan",
+  "Wait to Respond": "Vänta på respons",
+  "Inform before acting": "Informera före handling",
+  "Wait a Lunar Cycle": "Vänta en måncykel",
+  "Single Definition": "Single Definition",
+  "Split Definition": "Split Definition",
+};
+
+const SIGN_TONE: Record<string, { sv: string; en: string }> = {
+  Aries: { sv: "rak, snabb och modig", en: "direct, quick, and brave" },
+  Taurus: { sv: "jordnära, stadig och sensuell", en: "grounded, steady, and sensual" },
+  Gemini: { sv: "rörlig, nyfiken och snabb i uttrycket", en: "changeable, curious, and quick in expression" },
+  Cancer: { sv: "omsorgsfull, känslig och beskyddande", en: "caring, sensitive, and protective" },
+  Leo: { sv: "varm, stolt och uttrycksfull", en: "warm, proud, and expressive" },
+  Virgo: { sv: "analytisk, omsorgsfull och detaljmedveten", en: "analytical, caring, and detail-aware" },
+  Libra: { sv: "social, relationsmedveten och harmonisökande", en: "social, relationship-aware, and harmony-seeking" },
+  Scorpio: { sv: "intensiv, djup och kontrollerad", en: "intense, deep, and controlled" },
+  Sagittarius: { sv: "öppen, sökande och frihetsälskande", en: "open, seeking, and freedom-loving" },
+  Capricorn: { sv: "målmedveten, återhållsam och ansvarstagande", en: "driven, restrained, and responsible" },
+  Aquarius: { sv: "fri, originell och självständig", en: "free, original, and independent" },
+  Pisces: { sv: "mjuk, intuitiv och genomsläpplig", en: "soft, intuitive, and permeable" },
 };
 
 const compareElements = (left?: string | null, right?: string | null): number => {
@@ -957,7 +1748,383 @@ const scoreLabel = (score: number, locale: string, high: [string, string], mid: 
   return localeText(locale, low[0], low[1]);
 };
 
-const buildCompatibilityReport = (selfInsights: any, friendInsights: any, locale: string) => {
+const localizeAstroSign = (sign: string | null | undefined, locale: string): string => {
+  const raw = String(sign || "").trim();
+  if (!raw) return localeText(locale, "okänd", "unknown");
+  return localeText(locale, ASTRO_SIGN_SV[raw] || raw, raw);
+};
+
+const localizeChineseAnimal = (animal: string | null | undefined, locale: string): string => {
+  const raw = String(animal || "").trim();
+  if (!raw) return localeText(locale, "okänt tecken", "unknown sign");
+  return localeText(locale, CHINESE_ZODIAC_SV[raw] || raw, raw);
+};
+
+const localizeHumanDesignValue = (value: string | null | undefined, locale: string): string => {
+  const raw = String(value || "").trim();
+  if (!raw) return localeText(locale, "okänd", "unknown");
+  return localeText(locale, HUMAN_DESIGN_SV[raw] || raw, raw);
+};
+
+const signTone = (sign: string | null | undefined, locale: string): string => {
+  const raw = String(sign || "").trim();
+  const tone = SIGN_TONE[raw];
+  if (!tone) return localeText(locale, "en egen rytm", "its own rhythm");
+  return localeText(locale, tone.sv, tone.en);
+};
+
+const describePlacement = (planet: string, sign: string | null | undefined, locale: string): string => {
+  const signName = localizeAstroSign(sign, locale);
+  const tone = signTone(sign, locale);
+  switch (planet) {
+    case "Sun":
+      return localeText(
+        locale,
+        `Sol i ${signName} färgar identiteten med en energi som känns ${tone}.`,
+        `Sun in ${signName} colors identity with an energy that feels ${tone}.`
+      );
+    case "Moon":
+      return localeText(
+        locale,
+        `Månen i ${signName} bearbetar känslor på ett sätt som känns ${tone}.`,
+        `Moon in ${signName} processes feelings in a way that feels ${tone}.`
+      );
+    case "Ascendant":
+      return localeText(
+        locale,
+        `Ascendent i ${signName} gör första intrycket ${tone}.`,
+        `Ascendant in ${signName} makes the first impression feel ${tone}.`
+      );
+    case "Mercury":
+      return localeText(
+        locale,
+        `Merkurius i ${signName} tänker och talar på ett sätt som känns ${tone}.`,
+        `Mercury in ${signName} thinks and speaks in a way that feels ${tone}.`
+      );
+    case "Venus":
+      return localeText(
+        locale,
+        `Venus i ${signName} visar kärlek och smak genom en stil som känns ${tone}.`,
+        `Venus in ${signName} expresses affection and taste through a style that feels ${tone}.`
+      );
+    case "Mars":
+      return localeText(
+        locale,
+        `Mars i ${signName} tar initiativ och hanterar friktion på ett sätt som känns ${tone}.`,
+        `Mars in ${signName} takes initiative and handles friction in a way that feels ${tone}.`
+      );
+    case "Jupiter":
+      return localeText(
+        locale,
+        `Jupiter i ${signName} söker mening, tro och riktning genom en ton som känns ${tone}.`,
+        `Jupiter in ${signName} seeks meaning, faith, and direction through a tone that feels ${tone}.`
+      );
+    case "Saturn":
+      return localeText(
+        locale,
+        `Saturnus i ${signName} tar ansvar, struktur och plikt på ett sätt som känns ${tone}.`,
+        `Saturn in ${signName} approaches responsibility, structure, and duty in a way that feels ${tone}.`
+      );
+    default:
+      return localeText(
+        locale,
+        `${planet} i ${signName} bär en ton som känns ${tone}.`,
+        `${planet} in ${signName} carries a tone that feels ${tone}.`
+      );
+  }
+};
+
+const formatCompatibilityOutOfTen = (overall: number, locale: string, fractionDigits = 1): string => {
+  try {
+    return new Intl.NumberFormat(localeText(locale, "sv-SE", "en-US"), {
+      minimumFractionDigits: fractionDigits,
+      maximumFractionDigits: fractionDigits,
+    }).format(Math.max(0, Math.min(100, overall)) / 10);
+  } catch {
+    return (Math.max(0, Math.min(100, overall)) / 10).toFixed(fractionDigits);
+  }
+};
+
+const computeDeepDiveLovePotential = (
+  overall: number,
+  scores: Record<string, number>,
+  selfSummary: any,
+  friendSummary: any
+): number => {
+  const sameType =
+    String(selfSummary?.human_design?.type || "").trim().toLowerCase() ===
+    String(friendSummary?.human_design?.type || "").trim().toLowerCase();
+  const sameAuthority =
+    String(selfSummary?.human_design?.authority || "").trim().toLowerCase() ===
+    String(friendSummary?.human_design?.authority || "").trim().toLowerCase();
+  const sameStrategy =
+    String(selfSummary?.human_design?.strategy || "").trim().toLowerCase() ===
+    String(friendSummary?.human_design?.strategy || "").trim().toLowerCase();
+
+  const weighted =
+    overall * 0.45 +
+    (scores.moods_emotions || 0) * 0.15 +
+    (scores.responsibility || 0) * 0.15 +
+    (scores.sex_aggression || 0) * 0.15 +
+    (scores.intellect_communication || 0) * 0.05 +
+    (scores.basic_identities || 0) * 0.05;
+  const bonus = (sameType ? 4 : 0) + (sameAuthority ? 4 : 0) + (sameStrategy ? 1 : 0);
+  const raw = Math.max(0, Math.min(100, weighted + bonus));
+  return Math.floor(raw / 5) * 5;
+};
+
+const weakestDimensionAdvice = (key: string, locale: string): string => {
+  switch (key) {
+    case "basic_identities":
+      return localeText(
+        locale,
+        "Var tydliga tidigt med hur ni vill bli lästa, så att första intrycket inte får styra hela relationen.",
+        "Be explicit early about how you want to be read, so first impressions do not steer the whole relationship."
+      );
+    case "moods_emotions":
+      return localeText(
+        locale,
+        "Låt känslor få landa innan ni reagerar, särskilt när någon av er känner sig missförstådd.",
+        "Let feelings settle before reacting, especially when one of you feels misunderstood."
+      );
+    case "intellect_communication":
+      return localeText(
+        locale,
+        "Dubbelkolla ord, tempo och vad ni faktiskt menar, i stället för att tro att den andra automatiskt fattar.",
+        "Double-check words, pacing, and what you actually mean instead of assuming the other person automatically gets it."
+      );
+    case "love_pleasure":
+      return localeText(
+        locale,
+        "Prata konkret om hur ni vill ge och ta emot närhet, annars blir skillnader i stil lätt personliga.",
+        "Talk concretely about how you each want to give and receive closeness, otherwise stylistic differences turn personal quickly."
+      );
+    case "responsibility":
+      return localeText(
+        locale,
+        "Sätt ord på förväntningar, ansvar och vardagslogistik i stället för att hoppas att det löser sig av sig självt.",
+        "Put expectations, responsibility, and daily logistics into words instead of hoping they sort themselves out."
+      );
+    case "sex_aggression":
+      return localeText(
+        locale,
+        "Var tydliga kring initiativ, gränser och tempo, så att gnista inte glider över i irritation.",
+        "Be clear about initiative, boundaries, and pace so chemistry does not slide into irritation."
+      );
+    case "philosophies_of_life":
+      return localeText(
+        locale,
+        "Ge olika livssyner plats utan att göra dem till ett maktprov, annars blir avståndet större än det behöver vara.",
+        "Give different life views room without turning them into a power struggle, otherwise the distance grows larger than it needs to."
+      );
+    default:
+      return localeText(locale, "Var nyfikna på olikheter innan ni försöker lösa dem.", "Stay curious about differences before trying to solve them.");
+  }
+};
+
+const buildCompatibilityDeepDive = (
+  selfInsights: any,
+  friendInsights: any,
+  locale: string,
+  overall: number,
+  coreDimensions: Array<{ key: string; label: string; focus: string; score: number; note: string }>,
+  weakestDimension: { key: string; label: string; focus: string; score: number; note: string },
+  displayNames?: { self?: string | null; friend?: string | null }
+) => {
+  const selfSummary = selfInsights?.summary_json || {};
+  const friendSummary = friendInsights?.summary_json || {};
+  const selfName = String(displayNames?.self || "").trim() || localeText(locale, "Du", "You");
+  const friendName = String(displayNames?.friend || "").trim() || localeText(locale, "Din vän", "Your friend");
+  const selfSun = getPlanetSign(selfInsights, "Sun");
+  const selfMoon = getPlanetSign(selfInsights, "Moon");
+  const selfAsc = getPlanetSign(selfInsights, "Ascendant");
+  const selfMercury = getPlanetSign(selfInsights, "Mercury");
+  const selfVenus = getPlanetSign(selfInsights, "Venus");
+  const selfMars = getPlanetSign(selfInsights, "Mars");
+  const selfJupiter = getPlanetSign(selfInsights, "Jupiter");
+  const selfSaturn = getPlanetSign(selfInsights, "Saturn");
+  const friendSun = getPlanetSign(friendInsights, "Sun");
+  const friendMoon = getPlanetSign(friendInsights, "Moon");
+  const friendAsc = getPlanetSign(friendInsights, "Ascendant");
+  const friendMercury = getPlanetSign(friendInsights, "Mercury");
+  const friendVenus = getPlanetSign(friendInsights, "Venus");
+  const friendMars = getPlanetSign(friendInsights, "Mars");
+  const friendJupiter = getPlanetSign(friendInsights, "Jupiter");
+  const friendSaturn = getPlanetSign(friendInsights, "Saturn");
+  const selfHdAuthority = selfSummary?.human_design?.authority ?? null;
+  const friendHdAuthority = friendSummary?.human_design?.authority ?? null;
+  const selfHdProfile = selfSummary?.human_design?.profile ?? null;
+  const friendHdProfile = friendSummary?.human_design?.profile ?? null;
+  const selfHdStrategy = selfSummary?.human_design?.strategy ?? null;
+  const friendHdStrategy = friendSummary?.human_design?.strategy ?? null;
+  const selfHdDefinition = selfInsights?.human_design_json?.definition ?? null;
+  const friendHdDefinition = friendInsights?.human_design_json?.definition ?? null;
+  const selfChinese = selfSummary?.chinese_zodiac ?? null;
+  const friendChinese = friendSummary?.chinese_zodiac ?? null;
+  const noteFor = (key: string) => coreDimensions.find((dimension) => dimension.key === key)?.note || "";
+  const scoreFor = (key: string) => coreDimensions.find((dimension) => dimension.key === key)?.score || 0;
+  const deepDiveLovePotential = computeDeepDiveLovePotential(
+    overall,
+    {
+      basic_identities: scoreFor("basic_identities"),
+      moods_emotions: scoreFor("moods_emotions"),
+      intellect_communication: scoreFor("intellect_communication"),
+      responsibility: scoreFor("responsibility"),
+      sex_aggression: scoreFor("sex_aggression"),
+    },
+    selfSummary,
+    friendSummary
+  );
+
+  const sections = [
+    {
+      key: "basic_identities",
+      title: localeText(locale, "Kärnenergi och första intryck", "Core energy and first impression"),
+      score: scoreFor("basic_identities"),
+      summary: noteFor("basic_identities"),
+      body: [
+        localeText(
+          locale,
+          `${selfName} har Sol i ${localizeAstroSign(selfSun, locale)}, Måne i ${localizeAstroSign(selfMoon, locale)} och Ascendent i ${localizeAstroSign(selfAsc, locale)}. ${describePlacement("Sun", selfSun, locale)} ${describePlacement("Moon", selfMoon, locale)} ${describePlacement("Ascendant", selfAsc, locale)}`,
+          `${selfName} has Sun in ${localizeAstroSign(selfSun, locale)}, Moon in ${localizeAstroSign(selfMoon, locale)}, and Ascendant in ${localizeAstroSign(selfAsc, locale)}. ${describePlacement("Sun", selfSun, locale)} ${describePlacement("Moon", selfMoon, locale)} ${describePlacement("Ascendant", selfAsc, locale)}`
+        ),
+        localeText(
+          locale,
+          `${friendName} har Sol i ${localizeAstroSign(friendSun, locale)}, Måne i ${localizeAstroSign(friendMoon, locale)} och Ascendent i ${localizeAstroSign(friendAsc, locale)}. ${describePlacement("Sun", friendSun, locale)} ${describePlacement("Moon", friendMoon, locale)} ${describePlacement("Ascendant", friendAsc, locale)}`,
+          `${friendName} has Sun in ${localizeAstroSign(friendSun, locale)}, Moon in ${localizeAstroSign(friendMoon, locale)}, and Ascendant in ${localizeAstroSign(friendAsc, locale)}. ${describePlacement("Sun", friendSun, locale)} ${describePlacement("Moon", friendMoon, locale)} ${describePlacement("Ascendant", friendAsc, locale)}`
+        ),
+        scoreFor("basic_identities") >= 80
+          ? localeText(locale, "Det här brukar skapa snabb igenkänning och en tydlig känsla av att ni ser vem den andra är.", "This usually creates quick recognition and a clear sense of seeing who the other person really is.")
+          : scoreFor("basic_identities") >= 63
+            ? localeText(locale, "Här finns magnetism genom både träff och olikhet. Det kan bli levande, men kräver att ni lär er läsa varandras stil i stället för att anta för mycket.", "There is magnetism here through both overlap and difference. It can feel vivid, but it asks you to learn each other's style instead of assuming too much.")
+            : localeText(locale, "Här ligger en tydlig översättningszon. Om ni låter första intrycket bli hela sanningen missar ni lätt djupet i den andra personen.", "This is a clear translation zone. If first impressions become the whole truth, you easily miss the depth in the other person.")
+      ].join("\n\n"),
+    },
+    {
+      key: "moods_emotions",
+      title: localeText(locale, "Känslor och emotionellt tempo", "Feelings and emotional pacing"),
+      score: scoreFor("moods_emotions"),
+      summary: noteFor("moods_emotions"),
+      body: [
+        `${describePlacement("Moon", selfMoon, locale)} ${describePlacement("Moon", friendMoon, locale)}`,
+        selfHdAuthority && friendHdAuthority && selfHdAuthority === friendHdAuthority
+          ? localeText(locale, `Båda bär ${localizeHumanDesignValue(selfHdAuthority, locale)} i Human Design. Det kan ge ovanligt mycket känslomässig igenkänning, men också en risk att båda väntar länge innan någon säger tydligt vad som känns.`, `You both carry ${localizeHumanDesignValue(selfHdAuthority, locale)} in Human Design. That can create unusual emotional recognition, but also the risk that both wait a long time before someone clearly says what they feel.`)
+          : localeText(locale, `${selfName} bär ${localizeHumanDesignValue(selfHdAuthority, locale)} medan ${friendName} bär ${localizeHumanDesignValue(friendHdAuthority, locale)}. Det gör att trygghet och reglering inte alltid kommer se likadan ut för er.`, `${selfName} carries ${localizeHumanDesignValue(selfHdAuthority, locale)} while ${friendName} carries ${localizeHumanDesignValue(friendHdAuthority, locale)}. That means safety and regulation will not always look the same for the two of you.`),
+        scoreFor("moods_emotions") >= 80
+          ? localeText(locale, "Det här ser ut som ett område som verkligen kan bära relationen. När ni väl är trygga kan ni bli en plats där den andra får landa.", "This looks like an area that can genuinely carry the relationship. Once safety is there, you can become a place where the other person gets to land.")
+          : scoreFor("moods_emotions") >= 63
+            ? localeText(locale, "Ni kan möta varandra känslomässigt, men behöver vara tydliga med när ni vill ha mjukhet och när ni vill ha klarhet.", "You can meet each other emotionally, but you need to be clear about when you want softness and when you want clarity.")
+            : localeText(locale, "Här blir det lätt missförstånd om ni gissar i stället för att fråga. Känslor behöver språk mellan er, inte bara stämning.", "This area easily breeds misunderstanding if you guess instead of ask. Feelings need language between you, not just atmosphere.")
+      ].join("\n\n"),
+    },
+    {
+      key: "intellect_communication",
+      title: localeText(locale, "Kommunikation och mental kemi", "Communication and mental chemistry"),
+      score: scoreFor("intellect_communication"),
+      summary: noteFor("intellect_communication"),
+      body: [
+        `${describePlacement("Mercury", selfMercury, locale)} ${describePlacement("Mercury", friendMercury, locale)}`,
+        selfHdStrategy && friendHdStrategy && selfHdStrategy === friendHdStrategy
+          ? localeText(locale, `Ni delar dessutom strategin ${localizeHumanDesignValue(selfHdStrategy, locale)}. Det kan skapa en lättnad i att ni intuitivt förstår varför den andra inte alltid vill rusa först.`, `You also share the strategy ${localizeHumanDesignValue(selfHdStrategy, locale)}. That can create relief in how intuitively you understand why the other person does not always want to rush first.`)
+          : localeText(locale, `Ni bär olika strategier i Human Design, ${localizeHumanDesignValue(selfHdStrategy, locale)} respektive ${localizeHumanDesignValue(friendHdStrategy, locale)}. Därför kan ni vilja ha olika vägar in i samma samtal.`, `You carry different Human Design strategies, ${localizeHumanDesignValue(selfHdStrategy, locale)} and ${localizeHumanDesignValue(friendHdStrategy, locale)}. That means you may want different routes into the same conversation.`),
+        scoreFor("intellect_communication") >= 80
+          ? localeText(locale, "Tankemässigt finns god chans att ni väcker varandras klarhet. Samtal kan bli både levande och utvecklande.", "Mentally, there is a good chance you activate each other's clarity. Conversation can become both lively and developmental.")
+          : scoreFor("intellect_communication") >= 63
+            ? localeText(locale, "Samtalen kan bli riktigt bra, men ni behöver ibland olika tempo för att känna att ni faktiskt blivit hörda.", "Conversation can become genuinely good, but you sometimes need different pacing to feel truly heard.")
+            : localeText(locale, "Här kan orden bli för snabba, för skarpa eller för diffusa. Ni vinner på att spegla tillbaka det ni tror att den andra menar.", "Here, words can become too fast, too sharp, or too vague. You both benefit from reflecting back what you think the other person means.")
+      ].join("\n\n"),
+    },
+    {
+      key: "love_pleasure",
+      title: localeText(locale, "Kärlek, smak och tillgivenhet", "Love, pleasure, and affection"),
+      score: scoreFor("love_pleasure"),
+      summary: noteFor("love_pleasure"),
+      body: [
+        localeText(locale, `${selfName} bär Venus i ${localizeAstroSign(selfVenus, locale)} och ${friendName} bär Venus i ${localizeAstroSign(friendVenus, locale)}. ${describePlacement("Venus", selfVenus, locale)} ${describePlacement("Venus", friendVenus, locale)}`, `${selfName} carries Venus in ${localizeAstroSign(selfVenus, locale)} and ${friendName} carries Venus in ${localizeAstroSign(friendVenus, locale)}. ${describePlacement("Venus", selfVenus, locale)} ${describePlacement("Venus", friendVenus, locale)}`),
+        localeText(locale, `Närhet färgas också av Månen. ${describePlacement("Moon", selfMoon, locale)} ${describePlacement("Moon", friendMoon, locale)}`, `Closeness is also colored by the Moon. ${describePlacement("Moon", selfMoon, locale)} ${describePlacement("Moon", friendMoon, locale)}`),
+        scoreFor("love_pleasure") >= 80
+          ? localeText(locale, "Det här ser ut som en plats där attraktion och tillgivenhet hittar varandra ganska naturligt.", "This looks like a place where attraction and affection find each other rather naturally.")
+          : scoreFor("love_pleasure") >= 63
+            ? localeText(locale, "Det finns fin kemi, men ni kan behöva översätta vad som faktiskt känns romantiskt, tryggt eller njutbart för er var och en.", "There is good chemistry, but you may need to translate what actually feels romantic, safe, or pleasurable for each of you.")
+            : localeText(locale, "Här är det lätt att tro att den andra automatiskt förstår kärleksspråket. I praktiken kommer ni närmare varandra genom att säga det högt.", "It is easy here to assume the other person automatically understands your love language. In practice, you get closer by saying it out loud.")
+      ].join("\n\n"),
+    },
+    {
+      key: "responsibility",
+      title: localeText(locale, "Ansvar, vardag och hållbarhet", "Responsibility, daily life, and sustainability"),
+      score: scoreFor("responsibility"),
+      summary: noteFor("responsibility"),
+      body: [
+        `${describePlacement("Saturn", selfSaturn, locale)} ${describePlacement("Saturn", friendSaturn, locale)}`,
+        localeText(locale, `${selfName} bär profilen ${selfHdProfile || "—"} och ${localizeHumanDesignValue(selfHdDefinition, locale)}, medan ${friendName} bär profilen ${friendHdProfile || "—"} och ${localizeHumanDesignValue(friendHdDefinition, locale)}. Det säger något om hur ni organiserar energi, ansvar och relationell timing.`, `${selfName} carries the ${selfHdProfile || "—"} profile and ${localizeHumanDesignValue(selfHdDefinition, locale)}, while ${friendName} carries the ${friendHdProfile || "—"} profile and ${localizeHumanDesignValue(friendHdDefinition, locale)}. That says something about how you organize energy, responsibility, and relational timing.`),
+        scoreFor("responsibility") >= 80
+          ? localeText(locale, "Här finns god potential för något hållbart. Ni har olika nyanser, men de verkar inte dra åt helt olika håll.", "There is good potential for something lasting here. You have different nuances, but they do not seem to pull in entirely different directions.")
+          : scoreFor("responsibility") >= 63
+            ? localeText(locale, "Ni kan bygga fint ihop, men vardagsansvar och långsiktighet behöver uttalas snarare än antas.", "You can build well together, but daily responsibility and long-term expectations need to be spoken rather than assumed.")
+            : localeText(locale, "Om ni inte pratar tydligt om ansvar kan ni börja bära relationen på olika sätt utan att märka det. Då kommer slitningen smygande.", "If you do not talk clearly about responsibility, you may start carrying the relationship in different ways without noticing. That is how strain creeps in.")
+      ].join("\n\n"),
+    },
+    {
+      key: "sex_aggression",
+      title: localeText(locale, "Driv, sexuell kemi och friktion", "Drive, sexual chemistry, and friction"),
+      score: scoreFor("sex_aggression"),
+      summary: noteFor("sex_aggression"),
+      body: [
+        localeText(locale, `${selfName} bär Mars i ${localizeAstroSign(selfMars, locale)} och ${friendName} bär Mars i ${localizeAstroSign(friendMars, locale)}. ${describePlacement("Mars", selfMars, locale)} ${describePlacement("Mars", friendMars, locale)}`, `${selfName} carries Mars in ${localizeAstroSign(selfMars, locale)} and ${friendName} carries Mars in ${localizeAstroSign(friendMars, locale)}. ${describePlacement("Mars", selfMars, locale)} ${describePlacement("Mars", friendMars, locale)}`),
+        localeText(locale, `Ascendenten visar också hur ni möter tryck och laddning i stunden. ${describePlacement("Ascendant", selfAsc, locale)} ${describePlacement("Ascendant", friendAsc, locale)}`, `The Ascendant also shows how you meet pressure and charge in the moment. ${describePlacement("Ascendant", selfAsc, locale)} ${describePlacement("Ascendant", friendAsc, locale)}`),
+        scoreFor("sex_aggression") >= 80
+          ? localeText(locale, "Här finns ofta stark gnista utan att allt behöver bli kamp. Det kan bli levande, lekfullt och tydligt.", "There is often strong spark here without everything turning into a fight. It can feel alive, playful, and clear.")
+          : scoreFor("sex_aggression") >= 63
+            ? localeText(locale, "Det finns kemi, men ni triggas inte av exakt samma saker. Därför blir det viktigt att prata om tempo, initiativ och vad som känns tryggt.", "There is chemistry here, but you are not activated by exactly the same things. That makes it important to talk about pace, initiative, and what feels safe.")
+            : localeText(locale, "Det här är ett område där attraktion och irritation kan ligga nära varandra. Tydliga gränser gör stor skillnad.", "This is an area where attraction and irritation can sit close together. Clear boundaries make a big difference.")
+      ].join("\n\n"),
+    },
+    {
+      key: "philosophies_of_life",
+      title: localeText(locale, "Mening, riktning och livssyn", "Meaning, direction, and worldview"),
+      score: scoreFor("philosophies_of_life"),
+      summary: noteFor("philosophies_of_life"),
+      body: [
+        `${describePlacement("Jupiter", selfJupiter, locale)} ${describePlacement("Jupiter", friendJupiter, locale)}`,
+        localeText(locale, `I bakgrunden färgar också Solen och era kinesiska tecken berättelsen: ${selfName} bär ${localizeAstroSign(selfSun, locale)} och ${localizeChineseAnimal(selfChinese, locale)}, medan ${friendName} bär ${localizeAstroSign(friendSun, locale)} och ${localizeChineseAnimal(friendChinese, locale)}.`, `In the background, the Sun and your Chinese zodiac signs also color the story: ${selfName} carries ${localizeAstroSign(selfSun, locale)} and ${localizeChineseAnimal(selfChinese, locale)}, while ${friendName} carries ${localizeAstroSign(friendSun, locale)} and ${localizeChineseAnimal(friendChinese, locale)}.`),
+        scoreFor("philosophies_of_life") >= 80
+          ? localeText(locale, "När det här området är starkt får relationen ofta en känsla av gemensam riktning. Ni förstår ganska lätt varför den andra bryr sig om det den bryr sig om.", "When this area is strong, the relationship often gains a feeling of shared direction. You understand fairly easily why the other person cares about what they care about.")
+          : scoreFor("philosophies_of_life") >= 63
+            ? localeText(locale, "Ni kan inspirera varandra, men ni utgår inte alltid från samma karta. Det behöver inte vara ett problem så länge olikhet inte görs till fel.", "You can inspire each other, but you do not always begin from the same map. That does not have to be a problem as long as difference is not treated as wrong.")
+            : localeText(locale, "Det här ser ut som er tydligaste utvecklingszon. Om ni pressar fram samsyn för snabbt kan det i stället skapa avstånd.", "This looks like your clearest development zone. If you push for agreement too quickly, it can create distance instead.")
+      ].join("\n\n"),
+    },
+  ];
+
+  return {
+    intro:
+      overall >= 80
+        ? localeText(locale, `Min läsning: som kärlekspar ser ${selfName} och ${friendName} ut att ha stark dragningskraft och ovanligt god potential. Det här är inte helt friktionsfritt, men mycket bär av sig självt. Jag skulle sätta det till ungefär ${formatCompatibilityOutOfTen(deepDiveLovePotential, locale, 1)}/10 astrologiskt och Human Design-mässigt.`, `My reading: as a love match, ${selfName} and ${friendName} show strong attraction and unusually good potential. This is not completely frictionless, but a lot of it carries itself. I would put it at about ${formatCompatibilityOutOfTen(deepDiveLovePotential, locale, 1)}/10 astrologically and in Human Design terms.`)
+      : overall >= 63
+          ? localeText(locale, `Min läsning: som kärlekspar ser ${selfName} och ${friendName} ut att ha tydlig kemi och verklig potential, men det är inte en relation som glider helt av sig själv. Jag skulle sätta det till ungefär ${formatCompatibilityOutOfTen(deepDiveLovePotential, locale, 1)}/10 astrologiskt och Human Design-mässigt.`, `My reading: as a love match, ${selfName} and ${friendName} show clear chemistry and real potential, but this is not a bond that runs entirely on autopilot. I would put it at about ${formatCompatibilityOutOfTen(deepDiveLovePotential, locale, 1)}/10 astrologically and in Human Design terms.`)
+          : localeText(locale, `Min läsning: som kärlekspar ser ${selfName} och ${friendName} ut att ha stark laddning, men också flera tydliga översättningszoner. Det här kan bli fint, men det kräver mer medvetenhet än genomsnittet. Jag skulle sätta det till ungefär ${formatCompatibilityOutOfTen(deepDiveLovePotential, locale, 1)}/10 astrologiskt och Human Design-mässigt.`, `My reading: as a love match, ${selfName} and ${friendName} show strong charge, but also several clear translation zones. This can absolutely become meaningful, but it requires more awareness than average. I would put it at about ${formatCompatibilityOutOfTen(deepDiveLovePotential, locale, 1)}/10 astrologically and in Human Design terms.`),
+    outro:
+      overall >= 63
+        ? localeText(locale, "Min slutsats är därför: ja, det här kan bli väldigt fint om ni är tydliga med behov, låter känslor få landa och inte försöker pressa fram likhet där ni egentligen är olika.", "My conclusion is this: yes, this can become something beautiful if you stay clear about needs, let emotions land, and do not force sameness where you are fundamentally different.")
+        : localeText(locale, "Min slutsats är därför: det här är inte omöjligt, men ni behöver mer tålamod än charm. När ni lyckas möta varandra utan att vilja korrigera den andras natur finns ändå verklig potential.", "My conclusion is this: this is not impossible, but it will need more patience than charm. When you manage to meet each other without trying to correct the other's nature, there is still real potential here."),
+    rating: deepDiveLovePotential,
+    guidance: [
+      weakestDimensionAdvice(weakestDimension.key, locale),
+      selfHdAuthority && friendHdAuthority && selfHdAuthority === friendHdAuthority
+        ? localeText(locale, "Eftersom båda har emotionell process vinner ni på att låta större känslor passera ett varv innan ni låser ett beslut.", "Because you both process emotionally, you benefit from letting bigger feelings complete a cycle before locking a decision.")
+        : localeText(locale, "Var nyfikna på att trygghet kan se olika ut för er två, även när ni vill samma sak.", "Stay curious about the fact that safety may look different for each of you, even when you want the same thing."),
+      localeText(locale, "Försök inte ändra varandras natur för snabbt. Relationen blir starkare när skillnader får bli tydliga innan ni försöker lösa dem.", "Do not try to change each other's nature too quickly. The bond gets stronger when differences are allowed to become clear before you try to solve them."),
+    ],
+    sections,
+  };
+};
+
+const buildCompatibilityReport = (
+  selfInsights: any,
+  friendInsights: any,
+  locale: string,
+  displayNames?: { self?: string | null; friend?: string | null }
+) => {
   const selfSummary = selfInsights?.summary_json || {};
   const friendSummary = friendInsights?.summary_json || {};
   const basicIdentities = scoreToPercent(
@@ -1254,7 +2421,610 @@ const buildCompatibilityReport = (selfInsights: any, friendInsights: any, locale
                 ),
       },
     ],
+    deep_dive: buildCompatibilityDeepDive(selfInsights, friendInsights, locale, overall, coreDimensions, weakestDimension, displayNames),
   };
+};
+
+const loadCompatibilityContext = async ({
+  userId,
+  targetUserId,
+  authHeaders,
+  locale,
+}: {
+  userId: string;
+  targetUserId: string;
+  authHeaders: Record<string, string>;
+  locale: string;
+}): Promise<
+  | {
+      ok: true;
+      membership: any;
+      friendIdentity: any;
+      report: ReturnType<typeof buildCompatibilityReport>;
+      displayNames: { self: string; friend: string };
+    }
+  | {
+      ok: false;
+      status: number;
+      error: string;
+      message: string;
+    }
+> => {
+  await syncMembershipIdentity(userId, authHeaders);
+  const membership = await getMembershipRow(userId);
+  if (!membership?.active) {
+    return {
+      ok: false,
+      status: 402,
+      error: "membership_required",
+      message: apiErrorMessage("membership_required", locale),
+    };
+  }
+  if (!(await areAcceptedFriends(userId, targetUserId))) {
+    return {
+      ok: false,
+      status: 403,
+      error: "friendship_required",
+      message: apiErrorMessage("friendship_required", locale),
+    };
+  }
+
+  const [selfInsightsRes, targetInsightsRes, targetMembershipRes] = await Promise.all([
+    pool.query(
+      `SELECT insight_id, summary_json, astrology_json, human_design_json, created_at
+       FROM profile_insights
+       WHERE user_id = $1
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [userId]
+    ),
+    pool.query(
+      `SELECT insight_id, summary_json, astrology_json, human_design_json, created_at
+       FROM profile_insights
+       WHERE user_id = $1
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [targetUserId]
+    ),
+    pool.query(
+      `SELECT user_id, username, display_name, tier, ai_access
+       FROM user_memberships
+       WHERE user_id = $1`,
+      [targetUserId]
+    ),
+  ]);
+
+  if (!selfInsightsRes.rowCount || !targetInsightsRes.rowCount) {
+    return {
+      ok: false,
+      status: 400,
+      error: "profile_required",
+      message: apiErrorMessage("profile_required", locale),
+    };
+  }
+
+  const friendIdentity = targetMembershipRes.rowCount ? targetMembershipRes.rows[0] : { user_id: targetUserId };
+  const displayNames = {
+    self:
+      membership?.display_name ||
+      membership?.username ||
+      authHeaders["x-authentik-name"] ||
+      authHeaders["x-authentik-username"] ||
+      localeText(locale, "Du", "You"),
+    friend:
+      friendIdentity?.display_name ||
+      friendIdentity?.username ||
+      friendIdentity?.user_id ||
+      localeText(locale, "Din vän", "Your friend"),
+  };
+
+  return {
+    ok: true,
+    membership,
+    friendIdentity,
+    report: buildCompatibilityReport(selfInsightsRes.rows[0], targetInsightsRes.rows[0], locale, displayNames),
+    displayNames,
+  };
+};
+
+const buildCompatibilityEmail = ({
+  compatibility,
+  locale,
+  reportUrl,
+  displayNames,
+}: {
+  compatibility: any;
+  locale: string;
+  reportUrl: string;
+  displayNames?: { self?: string | null; friend?: string | null };
+}) => {
+  const safeLocale = String(locale || "en-US").trim() || "en-US";
+  const selfName = String(displayNames?.self || "").trim() || localeText(safeLocale, "Du", "You");
+  const friendName =
+    String(
+      displayNames?.friend ||
+        compatibility?.friend?.display_name ||
+        compatibility?.friend?.username ||
+        compatibility?.friend?.user_id ||
+        ""
+    ).trim() || localeText(safeLocale, "Din vän", "Your friend");
+  const deepDive = compatibility?.deep_dive ?? {};
+  const ratingRaw =
+    typeof deepDive?.rating === "number" && Number.isFinite(deepDive.rating)
+      ? deepDive.rating
+      : Math.max(0, Math.min(100, Number(compatibility?.overall || 0)));
+  const ratingText = `${formatCompatibilityOutOfTen(ratingRaw, safeLocale, 1)}/10`;
+  const subject = localeText(
+    safeLocale,
+    `Horoskopjämförelse: ${selfName} och ${friendName}`,
+    `Compatibility Reading: ${selfName} and ${friendName}`
+  );
+  const intro = String(deepDive?.intro || compatibility?.summary || "").trim();
+  const outro = String(deepDive?.outro || "").trim();
+  const guidance = Array.isArray(deepDive?.guidance) ? deepDive.guidance.filter(Boolean) : [];
+  const sections = Array.isArray(deepDive?.sections) ? deepDive.sections.filter(Boolean) : [];
+  const previewSectionKeys = new Set(["basic_identities", "love_pleasure"]);
+  const previewDimensions = (Array.isArray(compatibility?.dimensions) ? compatibility.dimensions : [])
+    .filter((dimension: any) =>
+      ["basic_identities", "moods_emotions", "intellect_communication", "love_pleasure"].includes(String(dimension?.key || ""))
+    )
+    .slice(0, 4);
+  const previewSections = sections.filter((section: any) => previewSectionKeys.has(String(section?.key || ""))).slice(0, 2);
+  const attachmentHint = localeText(
+    safeLocale,
+    "Resten av djupjämförelsen finns i den bifogade HTML-filen.",
+    "The rest of the deep reading is included in the attached HTML file."
+  );
+  const openLabel = localeText(safeLocale, "Öppna i STARDOM", "Open in STARDOM");
+  const previewTitle = localeText(safeLocale, "Djup horoskopjämförelse", "Deep compatibility reading");
+  const guidanceTitle = localeText(safeLocale, "Det här behöver ni vara rädda om", "What you need to protect");
+
+  const renderBodyParagraphs = (value: string) =>
+    String(value || "")
+      .split(/\n\n+/)
+      .map((paragraph) => paragraph.trim())
+      .filter(Boolean)
+      .map(
+        (paragraph) =>
+          `<p style="margin:0 0 12px;font-size:16px;line-height:1.7;color:#f3ead9;">${escapeHtml(paragraph)}</p>`
+      )
+      .join("");
+
+  const previewDimensionsHtml = previewDimensions
+    .map(
+      (dimension: any) => `<td valign="top" style="padding:6px;">
+        <div style="height:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:16px;padding:14px 14px 12px;">
+          <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:8px;">
+            <strong style="font-size:15px;line-height:1.35;color:#fff3de;">${escapeHtml(String(dimension?.label || "—"))}</strong>
+            <span style="font-size:13px;line-height:1.2;color:#f0c88f;">${escapeHtml(String(dimension?.score ?? "—"))}/100</span>
+          </div>
+          <p style="margin:0;font-size:14px;line-height:1.6;color:#e8ddc9;">${escapeHtml(String(dimension?.note || ""))}</p>
+        </div>
+      </td>`
+    )
+    .join("");
+
+  const previewSectionsHtml = previewSections
+    .map(
+      (section: any) => `<tr>
+        <td style="padding:0 0 14px;">
+          <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:18px;padding:18px;">
+            <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:8px;flex-wrap:wrap;">
+              <h3 style="margin:0;font-size:22px;line-height:1.2;color:#fff1d4;">${escapeHtml(String(section?.title || ""))}</h3>
+              <span style="display:inline-block;padding:6px 10px;border-radius:999px;background:rgba(255,214,144,0.12);border:1px solid rgba(255,214,144,0.2);font-size:13px;color:#ffdca8;">${escapeHtml(
+                String(section?.score ?? "—")
+              )}/100</span>
+            </div>
+            <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#ffdca8;">${escapeHtml(String(section?.summary || ""))}</p>
+            ${renderBodyParagraphs(String(section?.body || ""))}
+          </div>
+        </td>
+      </tr>`
+    )
+    .join("");
+
+  const guidanceHtml = guidance.length
+    ? `<tr>
+        <td style="padding:0 0 14px;">
+          <div style="background:rgba(255,215,140,0.08);border:1px solid rgba(255,215,140,0.18);border-radius:18px;padding:18px;">
+            <h3 style="margin:0 0 12px;font-size:20px;line-height:1.2;color:#fff1d4;">${escapeHtml(guidanceTitle)}</h3>
+            <ul style="margin:0;padding:0 0 0 18px;color:#f3ead9;">
+              ${guidance
+                .map(
+                  (item: string) =>
+                    `<li style="margin:0 0 10px;font-size:15px;line-height:1.65;">${escapeHtml(item)}</li>`
+                )
+                .join("")}
+            </ul>
+          </div>
+        </td>
+      </tr>`
+    : "";
+
+  const html = `<!doctype html>
+<html lang="${escapeHtml(safeLocale)}">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${escapeHtml(subject)}</title>
+  </head>
+  <body style="margin:0;padding:0;background:#efe5d4;color:#1f1610;font-family:Georgia,'Times New Roman',serif;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;background:#efe5d4;">
+      <tr>
+        <td align="center" style="padding:20px 12px 32px;">
+          <table role="presentation" width="680" cellspacing="0" cellpadding="0" style="width:100%;max-width:680px;border-collapse:collapse;">
+            <tr>
+              <td style="background:linear-gradient(135deg,#17192f 0%,#1f1430 58%,#382619 100%);border:1px solid #403752;border-radius:28px;padding:24px 22px;color:#f0e8d9;">
+                <p style="margin:0 0 10px;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:#f0c88f;">SPUTNET WORLD</p>
+                <h1 style="margin:0 0 12px;font-size:42px;line-height:1.04;color:#f7ecda;">${escapeHtml(previewTitle)}</h1>
+                <p style="margin:0 0 18px;font-size:18px;line-height:1.6;color:#f0e8d9;">${escapeHtml(
+                  localeText(
+                    safeLocale,
+                    `${selfName} och ${friendName} har nu en sparad djupjämförelse via astrologi och Human Design.`,
+                    `${selfName} and ${friendName} now have a saved deep reading through astrology and Human Design.`
+                  )
+                )}</p>
+
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-bottom:16px;">
+                  <tr>
+                    <td valign="top" style="padding:0 10px 10px 0;">
+                      <div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:16px;padding:14px 16px;">
+                        <div style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#d9d0c2;margin-bottom:6px;">${escapeHtml(
+                          localeText(safeLocale, "Betyg", "Rating")
+                        )}</div>
+                        <div style="font-size:30px;line-height:1.1;color:#fff3de;font-weight:700;">${escapeHtml(ratingText)}</div>
+                      </div>
+                    </td>
+                    <td valign="top" style="padding:0 0 10px 10px;">
+                      <div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:16px;padding:14px 16px;">
+                        <div style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#d9d0c2;margin-bottom:6px;">${escapeHtml(
+                          localeText(safeLocale, "Dynamik", "Dynamic")
+                        )}</div>
+                        <div style="font-size:24px;line-height:1.2;color:#fff3de;font-weight:700;">${escapeHtml(
+                          String(compatibility?.band || "—")
+                        )}</div>
+                      </div>
+                    </td>
+                  </tr>
+                </table>
+
+                ${renderBodyParagraphs(intro)}
+
+                ${
+                  previewDimensionsHtml
+                    ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:16px 0 12px;">
+                        <tr>${previewDimensionsHtml}</tr>
+                      </table>`
+                    : ""
+                }
+
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-top:8px;">
+                  ${previewSectionsHtml}
+                  ${guidanceHtml}
+                  ${
+                    outro
+                      ? `<tr><td style="padding:0 0 14px;"><div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:16px;">${renderBodyParagraphs(
+                          outro
+                        )}</div></td></tr>`
+                      : ""
+                  }
+                </table>
+
+                <div style="margin-top:16px;padding:16px 18px;border-radius:18px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);">
+                  <p style="margin:0 0 10px;font-size:15px;line-height:1.65;color:#f0e8d9;">${escapeHtml(attachmentHint)}</p>
+                  ${
+                    reportUrl
+                      ? `<a href="${escapeHtml(reportUrl)}" style="display:inline-block;padding:11px 18px;border-radius:999px;background:#db4a2b;color:#ffffff;text-decoration:none;font-weight:700;">${escapeHtml(
+                          openLabel
+                        )}</a>`
+                      : ""
+                  }
+                </div>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+
+  const attachmentSectionsHtml = sections
+    .map((section: any) => {
+      const paragraphs = String(section?.body || "")
+        .split(/\n\n+/)
+        .map((paragraph) => paragraph.trim())
+        .filter(Boolean)
+        .map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`)
+        .join("");
+      return `<article class="section-card">
+        <div class="section-card__head">
+          <h2>${escapeHtml(String(section?.title || ""))}</h2>
+          <span>${escapeHtml(String(section?.score ?? "—"))}/100</span>
+        </div>
+        <p class="section-card__summary">${escapeHtml(String(section?.summary || ""))}</p>
+        ${paragraphs}
+      </article>`;
+    })
+    .join("");
+
+  const attachmentDimensionsHtml = (Array.isArray(compatibility?.dimensions) ? compatibility.dimensions : [])
+    .map(
+      (dimension: any) => `<article class="metric-card">
+        <div class="metric-card__head">
+          <strong>${escapeHtml(String(dimension?.label || "—"))}</strong>
+          <span>${escapeHtml(String(dimension?.score ?? "—"))}/100</span>
+        </div>
+        <p>${escapeHtml(String(dimension?.note || ""))}</p>
+      </article>`
+    )
+    .join("");
+
+  const attachmentHtml = `<!doctype html>
+<html lang="${escapeHtml(safeLocale)}">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${escapeHtml(subject)}</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Space+Grotesk:wght@400;500;600&display=swap");
+      :root {
+        color-scheme: dark;
+        --bg: #f1e7d8;
+        --shell: linear-gradient(135deg, #17192f 0%, #1f1430 58%, #382619 100%);
+        --line: rgba(255,255,255,0.12);
+        --card: rgba(255,255,255,0.05);
+        --ink: #f6ecdc;
+        --muted: #d8cfbe;
+        --warm: #ffd9a0;
+        --accent: #db4a2b;
+      }
+      * {
+        box-sizing: border-box;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      @page {
+        size: A4;
+        margin: 12mm;
+      }
+      html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--ink); }
+      body { padding: 24px 16px 48px; font-family: "Space Grotesk", Arial, sans-serif; }
+      .wrap { width: min(980px, 100%); margin: 0 auto; }
+      .shell {
+        background: var(--shell);
+        border: 1px solid rgba(58, 52, 74, 0.9);
+        border-radius: 28px;
+        padding: 28px;
+        box-shadow: 0 26px 80px rgba(19, 15, 24, 0.28);
+      }
+      .eyebrow {
+        margin: 0 0 10px;
+        font-size: 12px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: #f0c88f;
+      }
+      h1 {
+        margin: 0 0 12px;
+        font-size: clamp(2.5rem, 5vw, 4rem);
+        line-height: 0.98;
+        color: #fff1d9;
+        font-family: "Fraunces", Georgia, serif;
+      }
+      .lead,
+      .section-card p,
+      .metric-card p,
+      .outro,
+      li {
+        margin: 0;
+        font-size: 1.08rem;
+        line-height: 1.75;
+        color: var(--ink);
+      }
+      .hero-grid,
+      .metric-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 14px;
+      }
+      .hero-grid { margin: 18px 0 22px; }
+      .hero-card,
+      .metric-card,
+      .section-card,
+      .guidance,
+      .outro {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+      }
+      .hero-card,
+      .metric-card { padding: 16px; }
+      .hero-card__label {
+        margin: 0 0 8px;
+        font-size: 12px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .hero-card__value {
+        margin: 0;
+        font-size: 1.85rem;
+        line-height: 1.2;
+        color: #fff3de;
+        font-weight: 700;
+        font-family: "Fraunces", Georgia, serif;
+      }
+      .intro {
+        margin: 0 0 22px;
+        font-size: 1.16rem;
+        line-height: 1.8;
+        color: var(--ink);
+      }
+      .metric-grid,
+      .sections {
+        margin-top: 18px;
+      }
+      .metric-card__head,
+      .section-card__head {
+        display: flex;
+        gap: 12px;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 10px;
+      }
+      .metric-card__head strong,
+      .section-card__head h2 {
+        margin: 0;
+        font-size: 1.15rem;
+        line-height: 1.3;
+        color: #fff1d4;
+        font-family: "Fraunces", Georgia, serif;
+      }
+      .metric-card__head span,
+      .section-card__head span {
+        display: inline-flex;
+        align-items: center;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: rgba(255,214,144,0.12);
+        border: 1px solid rgba(255,214,144,0.2);
+        color: var(--warm);
+        font-size: 0.9rem;
+        white-space: nowrap;
+      }
+      .section-card {
+        padding: 20px;
+        margin-top: 14px;
+      }
+      .section-card__summary {
+        margin: 0 0 12px;
+        color: var(--warm);
+      }
+      .section-card p + p { margin-top: 12px; }
+      .guidance,
+      .outro {
+        margin-top: 18px;
+        padding: 18px 20px;
+      }
+      .guidance h2 {
+        margin: 0 0 12px;
+        font-size: 1.25rem;
+        color: #fff1d4;
+      }
+      .guidance ul {
+        margin: 0;
+        padding-left: 20px;
+        display: grid;
+        gap: 10px;
+      }
+      .footer-link {
+        margin-top: 20px;
+      }
+      .footer-link a {
+        display: inline-block;
+        padding: 12px 18px;
+        border-radius: 999px;
+        background: var(--accent);
+        color: #ffffff;
+        text-decoration: none;
+        font-weight: 700;
+      }
+      @media print {
+        body { padding: 0; }
+        .wrap { width: 100%; }
+        .shell { box-shadow: none; }
+      }
+      @media (max-width: 720px) {
+        body { padding: 12px 8px 28px; }
+        .shell { padding: 18px; border-radius: 22px; }
+        .intro, .lead, .section-card p, .metric-card p, li { font-size: 1rem; }
+        .metric-card__head, .section-card__head { flex-direction: column; align-items: flex-start; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <main class="shell">
+        <p class="eyebrow">SPUTNET WORLD</p>
+        <h1>${escapeHtml(subject)}</h1>
+        <p class="intro">${escapeHtml(intro || compatibility?.summary || "")}</p>
+
+        <section class="hero-grid">
+          <article class="hero-card">
+            <p class="hero-card__label">${escapeHtml(localeText(safeLocale, "Betyg", "Rating"))}</p>
+            <p class="hero-card__value">${escapeHtml(ratingText)}</p>
+          </article>
+          <article class="hero-card">
+            <p class="hero-card__label">${escapeHtml(localeText(safeLocale, "Dynamik", "Dynamic"))}</p>
+            <p class="hero-card__value">${escapeHtml(String(compatibility?.band || "—"))}</p>
+          </article>
+          <article class="hero-card">
+            <p class="hero-card__label">${escapeHtml(localeText(safeLocale, "Personer", "People"))}</p>
+            <p class="hero-card__value">${escapeHtml(`${selfName} + ${friendName}`)}</p>
+          </article>
+        </section>
+
+        <section class="metric-grid">${attachmentDimensionsHtml}</section>
+        <section class="sections">${attachmentSectionsHtml}</section>
+
+        ${
+          guidance.length
+            ? `<section class="guidance">
+                <h2>${escapeHtml(guidanceTitle)}</h2>
+                <ul>${guidance.map((item: string) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+              </section>`
+            : ""
+        }
+
+        ${
+          outro
+            ? `<section class="outro"><p class="lead">${escapeHtml(outro)}</p></section>`
+            : ""
+        }
+
+        ${
+          reportUrl
+            ? `<p class="footer-link"><a href="${escapeHtml(reportUrl)}">${escapeHtml(openLabel)}</a></p>`
+            : ""
+        }
+      </main>
+    </div>
+  </body>
+</html>`;
+
+  const text = [
+    subject,
+    `${localeText(safeLocale, "Betyg", "Rating")}: ${ratingText}`,
+    `${localeText(safeLocale, "Dynamik", "Dynamic")}: ${String(compatibility?.band || "—")}`,
+    "",
+    intro || String(compatibility?.summary || ""),
+    "",
+    ...previewDimensions.map(
+      (dimension: any) => `${String(dimension?.label || "—")}: ${String(dimension?.score ?? "—")}/100\n${String(dimension?.note || "")}`
+    ),
+    "",
+    guidance.length ? `${guidanceTitle}:\n${guidance.map((item: string) => `- ${item}`).join("\n")}` : "",
+    "",
+    attachmentHint,
+    reportUrl ? `${openLabel}: ${reportUrl}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const slugifyPart = (value: string) =>
+    String(value || "")
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .toLowerCase();
+
+  const attachmentFileName = normalizeReportEmailFilename(
+    `${localeText(safeLocale, "horoskopjamforelse", "compatibility-reading")}-${slugifyPart(selfName)}-${slugifyPart(friendName)}`
+  );
+
+  return { subject, html, text, attachmentHtml, attachmentFileName };
 };
 
 const extractOpenAiText = (payload: any): string => {
@@ -1510,23 +3280,58 @@ const server = http.createServer((req, res) => {
       ),
       fetchAuthentikUserInfo(authHeaders),
     ])
-      .then(([result, userInfo]) => {
+      .then(async ([result, userInfo]) => {
         const row = result.rowCount ? result.rows[0] : null;
         if (row?.birth_date) {
           row.birth_date = toDateStringWithTz(row.birth_date, row.tz_name ?? null);
         }
+        const sharedUser = await ensureSharedUserRecord(authHeaders, userInfo);
         const fallbackUser = {
           username: authHeaders["x-authentik-username"] ?? null,
           email: authHeaders["x-authentik-email"] ?? null,
           name: authHeaders["x-authentik-name"] ?? null,
         };
-        const user = { ...(fallbackUser || {}), ...(userInfo || {}) };
+        const user = { ...(fallbackUser || {}), ...(userInfo || {}), ...(sharedUser || {}) };
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ ok: true, profile: row, user, missing: !row }));
       })
       .catch((err) => {
         res.writeHead(500, { "content-type": "application/json" });
         res.end(JSON.stringify({ ok: false, error: "db_error", details: String(err) }));
+      });
+    return;
+  }
+  if (req.url === "/api/profile/account" && req.method === "POST") {
+    const authHeaders = getAuthentikHeaders(req.headers as Record<string, unknown>);
+    const userId = authHeaders["x-authentik-uid"] ?? null;
+    if (!userId) {
+      res.writeHead(401, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: false, error: "unauthorized" }));
+      return;
+    }
+    parseJsonBody(req, REPORT_EMAIL_PAYLOAD_MAX_BYTES)
+      .then(async (body) => {
+        const fallbackUser = await ensureSharedUserRecord(authHeaders, null);
+        const emailRaw = body?.email === undefined ? fallbackUser?.email ?? null : body?.email;
+        const usernameRaw = body?.username === undefined ? fallbackUser?.username ?? null : body?.username;
+        const nameRaw = body?.name === undefined ? fallbackUser?.name ?? null : body?.name;
+        const normalizedEmail = sanitizeAccountValue(emailRaw, 320);
+        if (normalizedEmail && !isValidEmail(normalizedEmail)) {
+          res.writeHead(400, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: "invalid_email" }));
+          return;
+        }
+        const user = await updateSharedUserProfile(userId, {
+          email: normalizedEmail,
+          username: sanitizeAccountValue(usernameRaw, 128),
+          name: sanitizeAccountValue(nameRaw, 128),
+        });
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true, user }));
+      })
+      .catch((err) => {
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: "invalid_payload", details: String(err) }));
       });
     return;
   }
@@ -1602,6 +3407,143 @@ const server = http.createServer((req, res) => {
       .catch((err) => {
         res.writeHead(400, { "content-type": "application/json" });
         res.end(JSON.stringify({ ok: false, error: "invalid_payload", details: String(err) }));
+      });
+    return;
+  }
+  if (req.url === "/api/profile/report-email" && req.method === "POST") {
+    const authHeaders = getAuthentikHeaders(req.headers as Record<string, unknown>);
+    const userId = authHeaders["x-authentik-uid"] ?? null;
+    const locale = getRequestLocale(req);
+    if (!userId) {
+      res.writeHead(401, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: false, error: "unauthorized", message: apiErrorMessage("unauthorized", locale) }));
+      return;
+    }
+    parseJsonBody(req, REPORT_EMAIL_PAYLOAD_MAX_BYTES)
+      .then(async (body) => {
+        const to = normalizeRecipientEmail(body?.to);
+        const reportData = body?.reportData;
+        const payloadLocale = String(body?.locale || locale).trim() || locale;
+        const reportUrl = normalizeAbsoluteUrl(body?.reportUrl);
+        const reportPrintUrl = normalizeAbsoluteUrl(body?.reportPrintUrl);
+        const reportHtml = normalizeReportEmailHtml(body?.reportHtml);
+        const reportSubject = String(body?.reportSubject || "").replace(/\s+/g, " ").trim();
+        const reportHtmlFileName = normalizeReportEmailFilename(body?.reportHtmlFileName);
+
+        if (!to || !isValidEmail(to)) {
+          res.writeHead(400, { "content-type": "application/json" });
+          res.end(
+            JSON.stringify({
+              ok: false,
+              error: "invalid_email",
+              message: localeText(payloadLocale, "Ange en giltig e-postadress.", "Please enter a valid email address."),
+            })
+          );
+          return;
+        }
+        if (!reportData || typeof reportData !== "object") {
+          res.writeHead(400, { "content-type": "application/json" });
+          res.end(
+            JSON.stringify({
+              ok: false,
+              error: "missing_report_data",
+              message: localeText(payloadLocale, "Rapportdata saknas.", "Report data is missing."),
+            })
+          );
+          return;
+        }
+
+        try {
+          const transporter = await getMailTransport();
+          const sender = getMailSender();
+          const replyTo = String(
+            authHeaders["x-authentik-email"] || authHeaders["x-authentik-username"] || ""
+          ).trim();
+          const email = buildNatalReportEmail({
+            data: reportData,
+            reportUrl,
+            reportPrintUrl,
+            locale: payloadLocale,
+          });
+          const emailPayload = {
+            subject: reportSubject || email.subject,
+            // Always send a mail-safe preview in body.
+            html: email.html,
+            text: reportHtml
+              ? `${email.text}\n\n${localeText(
+                  payloadLocale,
+                  "Hela rapporten ligger i den bifogade HTML-filen.",
+                  "The full report is in the attached HTML file."
+                )}`
+              : email.text,
+            attachments: reportHtml
+              ? [
+                  {
+                    filename: reportHtmlFileName,
+                    content: reportHtml,
+                    contentType: "text/html; charset=utf-8",
+                  },
+                ]
+              : undefined,
+          };
+
+          await transporter.sendMail({
+            from: `"${sender.name.replace(/"/g, '\\"')}" <${sender.address}>`,
+            to,
+            replyTo: replyTo && isValidEmail(replyTo) ? replyTo : undefined,
+            subject: emailPayload.subject,
+            html: emailPayload.html,
+            text: emailPayload.text,
+            attachments: emailPayload.attachments,
+          });
+
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(
+            JSON.stringify({
+              ok: true,
+              message: localeText(
+                payloadLocale,
+                `Rapporten skickades till ${to}.`,
+                `The report was sent to ${to}.`
+              ),
+            })
+          );
+        } catch (error) {
+          const payload = getReportEmailErrorPayload(error, payloadLocale);
+          console.error("[report-email] mail send failed", {
+            code: getMailErrorCode(error),
+            response: getMailErrorResponse(error),
+            message: error instanceof Error ? error.message : String(error),
+          });
+          res.writeHead(payload.status, { "content-type": "application/json" });
+          res.end(
+            JSON.stringify({
+              ok: false,
+              error: payload.error,
+              message: payload.message,
+              details: payload.details,
+            })
+          );
+        }
+      })
+      .catch((error) => {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const isTooLarge = errorMessage.includes("payload_too_large");
+        res.writeHead(isTooLarge ? 413 : 400, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            ok: false,
+            error: isTooLarge ? "payload_too_large" : "invalid_payload",
+            message: isTooLarge
+              ? localeText(
+                  locale,
+                  "Fullrapporten blev för stor att skicka i ett enda mejl. Försök igen eller minska mängden inbäddade bilder.",
+                  "The full report became too large to send in a single email. Please try again or reduce embedded images."
+                )
+              : localeText(locale, "Ogiltig förfrågan.", "Invalid request."),
+            details: String(error),
+          })
+        );
       });
     return;
   }
@@ -1795,33 +3737,66 @@ const server = http.createServer((req, res) => {
           return;
         }
         const result = await pool.query(
-          `SELECT
-             um.user_id,
-             um.username,
-             um.display_name,
+          `WITH searchable_users AS (
+             SELECT
+               COALESCE(NULLIF(u.external_id, ''), um.user_id) AS user_id,
+               COALESCE(NULLIF(um.username, ''), NULLIF(u.username, '')) AS username,
+               COALESCE(NULLIF(um.display_name, ''), NULLIF(u.name, ''), NULLIF(u.username, '')) AS display_name,
+               COALESCE(um.active, FALSE) AS active,
+               COALESCE(um.tier, 'free') AS tier,
+               COALESCE(um.ai_access, FALSE) AS ai_access
+             FROM public.users u
+             LEFT JOIN user_memberships um
+               ON um.user_id = u.external_id
+             WHERE u.provider = 'authentik'
+               AND COALESCE(NULLIF(u.external_id, ''), '') <> ''
+
+             UNION ALL
+
+             SELECT
+               um.user_id,
+               um.username,
+               um.display_name,
+               um.active,
+               um.tier,
+               um.ai_access
+             FROM user_memberships um
+             WHERE NOT EXISTS (
+               SELECT 1
+               FROM public.users u
+               WHERE u.provider = 'authentik'
+                 AND u.external_id = um.user_id
+             )
+           )
+           SELECT
+             su.user_id,
+             su.username,
+             su.display_name,
+             su.active,
+             su.tier,
+             su.ai_access,
              CASE
                WHEN f.status = 'accepted' THEN 'accepted'
                WHEN f.requester_id = $1 THEN 'outgoing'
                WHEN f.addressee_id = $1 THEN 'incoming'
                ELSE 'none'
              END AS relation
-           FROM user_memberships um
+           FROM searchable_users su
            LEFT JOIN user_friendships f
              ON (
-               (f.requester_id = $1 AND f.addressee_id = um.user_id)
+               (f.requester_id = $1 AND f.addressee_id = su.user_id)
                OR
-               (f.requester_id = um.user_id AND f.addressee_id = $1)
+               (f.requester_id = su.user_id AND f.addressee_id = $1)
              )
-           WHERE um.user_id <> $1
-             AND um.active = TRUE
+           WHERE su.user_id <> $1
              AND (
-               COALESCE(um.username, '') ILIKE $2
+               COALESCE(su.username, '') ILIKE $2
                OR
-               COALESCE(um.display_name, '') ILIKE $2
+               COALESCE(su.display_name, '') ILIKE $2
                OR
-               um.user_id ILIKE $2
+               su.user_id ILIKE $2
              )
-           ORDER BY COALESCE(um.display_name, um.username, um.user_id)
+           ORDER BY su.active DESC, COALESCE(su.display_name, su.username, su.user_id)
            LIMIT 10`,
           [userId, `%${q}%`]
         );
@@ -1859,8 +3834,8 @@ const server = http.createServer((req, res) => {
           res.end(JSON.stringify({ ok: false, error: "invalid_target" }));
           return;
         }
-        const targetMembership = await getMembershipRow(targetUserId);
-        if (!targetMembership?.active) {
+        const targetMembership = await ensureMembershipRecordForUser(targetUserId);
+        if (!targetMembership) {
           res.writeHead(404, { "content-type": "application/json" });
           res.end(JSON.stringify({ ok: false, error: "target_missing" }));
           return;
@@ -2010,6 +3985,149 @@ const server = http.createServer((req, res) => {
     })();
     return;
   }
+  if (req.url === "/api/friends/compatibility/email" && req.method === "POST") {
+    const locale = getRequestLocale(req);
+    const authHeaders = getAuthentikHeaders(req.headers as Record<string, unknown>);
+    const userId = authHeaders["x-authentik-uid"] ?? null;
+    if (!userId) {
+      res.writeHead(401, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: false, error: "unauthorized", message: apiErrorMessage("unauthorized", locale) }));
+      return;
+    }
+    parseJsonBody(req, 200_000)
+      .then(async (body) => {
+        const payloadLocale = String(body?.locale || locale).trim() || locale;
+        const targetUserId = String(body?.targetUserId || "").trim();
+        const reportUrl = normalizeAbsoluteUrl(body?.reportUrl);
+        if (!targetUserId) {
+          res.writeHead(400, { "content-type": "application/json" });
+          res.end(
+            JSON.stringify({
+              ok: false,
+              error: "missing_user_id",
+              message: localeText(payloadLocale, "Vän saknas för jämförelsen.", "Missing friend for the reading."),
+            })
+          );
+          return;
+        }
+
+        const context = await loadCompatibilityContext({
+          userId,
+          targetUserId,
+          authHeaders,
+          locale: payloadLocale,
+        });
+        if (!context.ok) {
+          res.writeHead(context.status, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: context.error, message: context.message }));
+          return;
+        }
+
+        const sharedUser = await ensureSharedUserRecord(authHeaders, null);
+        const to = normalizeRecipientEmail(
+          body?.to || sharedUser?.email || context.membership?.email || authHeaders["x-authentik-email"] || ""
+        );
+        if (!to || !isValidEmail(to)) {
+          res.writeHead(400, { "content-type": "application/json" });
+          res.end(
+            JSON.stringify({
+              ok: false,
+              error: "invalid_email",
+              message: localeText(
+                payloadLocale,
+                "Lägg till en giltig e-postadress på din profil först.",
+                "Please add a valid email address to your profile first."
+              ),
+            })
+          );
+          return;
+        }
+
+        try {
+          const transporter = await getMailTransport();
+          const sender = getMailSender();
+          const replyTo = String(authHeaders["x-authentik-email"] || sharedUser?.email || "").trim();
+          const compatibility = {
+            ...context.report,
+            friend: context.friendIdentity,
+          };
+          const email = buildCompatibilityEmail({
+            compatibility,
+            locale: payloadLocale,
+            reportUrl,
+            displayNames: context.displayNames,
+          });
+
+          await transporter.sendMail({
+            from: `"${sender.name.replace(/"/g, '\\"')}" <${sender.address}>`,
+            to,
+            replyTo: replyTo && isValidEmail(replyTo) ? replyTo : undefined,
+            subject: email.subject,
+            html: email.html,
+            text: `${email.text}\n\n${localeText(
+              payloadLocale,
+              "Hela djupjämförelsen finns i den bifogade HTML-filen.",
+              "The full deep reading is in the attached HTML file."
+            )}`,
+            attachments: [
+              {
+                filename: email.attachmentFileName,
+                content: email.attachmentHtml,
+                contentType: "text/html; charset=utf-8",
+              },
+            ],
+          });
+
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(
+            JSON.stringify({
+              ok: true,
+              message: localeText(
+                payloadLocale,
+                `Horoskopjämförelsen skickades till ${to}.`,
+                `The compatibility reading was sent to ${to}.`
+              ),
+            })
+          );
+        } catch (error) {
+          const payload = getReportEmailErrorPayload(error, payloadLocale);
+          console.error("[compatibility-email] mail send failed", {
+            code: getMailErrorCode(error),
+            response: getMailErrorResponse(error),
+            message: error instanceof Error ? error.message : String(error),
+          });
+          res.writeHead(payload.status, { "content-type": "application/json" });
+          res.end(
+            JSON.stringify({
+              ok: false,
+              error: payload.error,
+              message: payload.message,
+              details: payload.details,
+            })
+          );
+        }
+      })
+      .catch((error) => {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const isTooLarge = errorMessage.includes("payload_too_large");
+        res.writeHead(isTooLarge ? 413 : 400, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            ok: false,
+            error: isTooLarge ? "payload_too_large" : "invalid_payload",
+            message: isTooLarge
+              ? localeText(
+                  locale,
+                  "Jämförelsemejlet blev för stort. Försök igen.",
+                  "The compatibility email became too large. Please try again."
+                )
+              : localeText(locale, "Ogiltig förfrågan.", "Invalid request."),
+            details: String(error),
+          })
+        );
+      });
+    return;
+  }
   if (req.url?.startsWith("/api/friends/compatibility/") && req.method === "GET") {
     const locale = getRequestLocale(req);
     const authHeaders = getAuthentikHeaders(req.headers as Record<string, unknown>);
@@ -2021,62 +4139,32 @@ const server = http.createServer((req, res) => {
     }
     (async () => {
       try {
-        await syncMembershipIdentity(userId, authHeaders);
-        const membership = await getMembershipRow(userId);
-        if (!membership?.active) {
-          res.writeHead(402, { "content-type": "application/json" });
-          res.end(JSON.stringify({ ok: false, error: "membership_required", message: apiErrorMessage("membership_required", locale) }));
-          return;
-        }
-        const parts = req.url!.split("/").filter(Boolean);
+        const requestUrl = new URL(req.url || "/", "http://localhost");
+        const parts = requestUrl.pathname.split("/").filter(Boolean);
         const targetUserId = parts[parts.length - 1];
         if (!targetUserId) {
           res.writeHead(400, { "content-type": "application/json" });
           res.end(JSON.stringify({ ok: false, error: "missing_user_id" }));
           return;
         }
-        if (!(await areAcceptedFriends(userId, targetUserId))) {
-          res.writeHead(403, { "content-type": "application/json" });
-          res.end(JSON.stringify({ ok: false, error: "friendship_required", message: apiErrorMessage("friendship_required", locale) }));
+        const context = await loadCompatibilityContext({
+          userId,
+          targetUserId,
+          authHeaders,
+          locale,
+        });
+        if (!context.ok) {
+          res.writeHead(context.status, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: context.error, message: context.message }));
           return;
         }
-        const [selfInsightsRes, targetInsightsRes, targetMembershipRes] = await Promise.all([
-          pool.query(
-            `SELECT insight_id, summary_json, astrology_json, human_design_json, created_at
-             FROM profile_insights
-             WHERE user_id = $1
-             ORDER BY created_at DESC
-             LIMIT 1`,
-            [userId]
-          ),
-          pool.query(
-            `SELECT insight_id, summary_json, astrology_json, human_design_json, created_at
-             FROM profile_insights
-             WHERE user_id = $1
-             ORDER BY created_at DESC
-             LIMIT 1`,
-            [targetUserId]
-          ),
-          pool.query(
-            `SELECT user_id, username, display_name, tier, ai_access
-             FROM user_memberships
-             WHERE user_id = $1`,
-            [targetUserId]
-          ),
-        ]);
-        if (!selfInsightsRes.rowCount || !targetInsightsRes.rowCount) {
-          res.writeHead(400, { "content-type": "application/json" });
-          res.end(JSON.stringify({ ok: false, error: "profile_required", message: apiErrorMessage("profile_required", locale) }));
-          return;
-        }
-        const report = buildCompatibilityReport(selfInsightsRes.rows[0], targetInsightsRes.rows[0], locale);
         res.writeHead(200, { "content-type": "application/json" });
         res.end(
           JSON.stringify({
             ok: true,
             compatibility: {
-              ...report,
-              friend: targetMembershipRes.rowCount ? targetMembershipRes.rows[0] : { user_id: targetUserId },
+              ...context.report,
+              friend: context.friendIdentity,
             },
           })
         );
@@ -2098,7 +4186,7 @@ const server = http.createServer((req, res) => {
     }
     (async () => {
       try {
-        const dbAvatar = await loadAvatarFromDbCandidates(avatarLookupCandidates(userId, username));
+        const dbAvatar = await loadAvatarFromDbCandidates(await resolveSharedAvatarCandidates(userId, username));
         if (dbAvatar) {
           res.writeHead(200, {
             "content-type": dbAvatar.mimeType,
@@ -2190,7 +4278,7 @@ const server = http.createServer((req, res) => {
 
         await ensureUserAvatarsTable();
         await pool.query(
-          `INSERT INTO user_avatars (user_id, avatar_mime_type, avatar_data)
+          `INSERT INTO public.user_avatars (user_id, avatar_mime_type, avatar_data)
            VALUES ($1, $2, $3)
            ON CONFLICT (user_id)
            DO UPDATE SET

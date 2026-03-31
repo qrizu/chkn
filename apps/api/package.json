@@ -11,6 +11,7 @@
     "full-icu": "^1.5.0",
     "jsonwebtoken": "^9.0.2",
     "natalengine": "^1.0.8",
+    "nodemailer": "^8.0.3",
     "pg": "^8.11.5",
     "redis": "^4.7.0",
     "sharp": "^0.34.5",
@@ -21,6 +22,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
+    "@types/nodemailer": "^7.0.11",
     "@types/pg": "^8.11.10",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3"

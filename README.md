@@ -242,28 +242,28 @@ Event-sourcing light (rekommenderat):
 1. Installera dependencies i repo-root:
 
 ```
-cd /home/qrizu/sputnet/services/chkn
+cd /home/qrizu/sputnet/services/stardom
 npm install
 ```
 
 2. Starta API:
 
 ```
-cd /home/qrizu/sputnet/services/chkn/apps/api
+cd /home/qrizu/sputnet/services/stardom/apps/api
 npm run dev
 ```
 
 Alternativt fran repo-root:
 
 ```
-cd /home/qrizu/sputnet/services/chkn
+cd /home/qrizu/sputnet/services/stardom
 npm run dev:api
 ```
 
 Kora API + frontend samtidigt:
 
 ```
-cd /home/qrizu/sputnet/services/chkn
+cd /home/qrizu/sputnet/services/stardom
 npm run dev
 ```
 
@@ -277,7 +277,7 @@ CHKN anvander en separat schema i samma Postgres-instans som Yatzy.
 1. Kora schema:
 
 ```
-psql "$DATABASE_URL" -f /home/qrizu/sputnet/services/chkn/db/schema.sql
+psql "$DATABASE_URL" -f /home/qrizu/sputnet/services/stardom/db/schema.sql
 ```
 
 2. Satt env vars for API:
@@ -289,7 +289,7 @@ REDIS_URL=redis://localhost:6379
 ```
 ### Bygg och Kör hjälp, kör från var som, bygger om med hjälp av python gyy och lite annat som är onödigt att isntallera lokalt, utan bar ha med sig på byggservern, python3 vill annars kalla på pip och köra virtuella runtimes,  
 ```
-docker compose -f /home/qrizu/sputnet/docker-compose.yml build chkn-backend
-docker compose -f /home/qrizu/sputnet/docker-compose.yml up -d chkn-backend
+docker compose -f /home/qrizu/sputnet/docker-compose.yml build stardom-backend
+docker compose -f /home/qrizu/sputnet/docker-compose.yml up -d stardom-backend
 
 ```
