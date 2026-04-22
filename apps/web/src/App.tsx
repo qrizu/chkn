@@ -9,6 +9,7 @@ import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
 import { socket } from "./socket";
+import SilentDiscoPage from "./SilentDiscoPage";
 
 type ServerEvent = { type: string; payload: any };
 type ProfilePayload = {
@@ -63,6 +64,61 @@ type FriendRow = {
 };
 
 const SHARED_AVATAR_BASE = "https://sputnet.world/avatars";
+const SPUTNET_HOME_URL = "https://sputnet.world";
+
+type ChickenChallengeOption = {
+  icon: string;
+  labelSv: string;
+  labelEn: string;
+  points: number;
+};
+
+const CHICKEN_CHALLENGE_OPTIONS: ChickenChallengeOption[] = [
+  {
+    icon: "🐔",
+    labelSv: "Gör en tiosekunders kycklingdans utan att skratta.",
+    labelEn: "Do a ten-second chicken dance without laughing.",
+    points: 25,
+  },
+  {
+    icon: "🎤",
+    labelSv: "Kommentera ett ägg som om det vore stor sportfinal.",
+    labelEn: "Commentate an egg like it is a championship final.",
+    points: 30,
+  },
+  {
+    icon: "👑",
+    labelSv: "Stelna i en dramatisk tupp-pose i femton sekunder.",
+    labelEn: "Freeze in a dramatic rooster pose for fifteen seconds.",
+    points: 20,
+  },
+  {
+    icon: "🥚",
+    labelSv: "Skriv eller läs upp ett kärleksbrev till en osynlig omelett.",
+    labelEn: "Write or perform a love letter to an invisible omelette.",
+    points: 35,
+  },
+  {
+    icon: "🕺",
+    labelSv: "Visa din bästa segerparad för ett hittat frö.",
+    labelEn: "Show your best victory parade for a found seed.",
+    points: 15,
+  },
+  {
+    icon: "🎭",
+    labelSv: "Prata som en superskurkkyckling i nästa hand.",
+    labelEn: "Talk like a supervillain chicken in the next hand.",
+    points: 40,
+  },
+];
+
+function getChickenChallengesForSeat(index: number, count = 4): ChickenChallengeOption[] {
+  if (CHICKEN_CHALLENGE_OPTIONS.length === 0) return [];
+  return Array.from({ length: Math.min(count, CHICKEN_CHALLENGE_OPTIONS.length) }, (_, offset) => {
+    const optionIndex = (index * 2 + offset) % CHICKEN_CHALLENGE_OPTIONS.length;
+    return CHICKEN_CHALLENGE_OPTIONS[optionIndex];
+  });
+}
 
 function sharedAvatarUrl(filename: string): string {
   const clean = String(filename || "").replace(/^\/+/, "");
@@ -79,6 +135,7 @@ function detectAppBase(pathname: string, configuredBase: string | undefined): st
   if (configured) return configured;
   if (pathname === "/stardom" || pathname.startsWith("/stardom/")) return "/stardom";
   if (pathname === "/chickenrace" || pathname.startsWith("/chickenrace/")) return "/chickenrace";
+  if (pathname === "/silent-disco" || pathname.startsWith("/silent-disco/")) return "/silent-disco";
   if (pathname === "/chicken" || pathname.startsWith("/chicken/")) return "/chicken";
   if (pathname === "/chkn" || pathname.startsWith("/chkn/")) return "/chkn";
   return "";
@@ -879,10 +936,13 @@ export default function App() {
   const [isHdOpen, setIsHdOpen] = useState(false);
   const [isHdChartOpen, setIsHdChartOpen] = useState(false);
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
+  const [isMobileHeaderHidden, setIsMobileHeaderHidden] = useState(false);
   const oracleRecognitionRef = useRef<any>(null);
   const avatarFileInputRef = useRef<HTMLInputElement | null>(null);
   const avatarPreviewCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const avatarDraftImageRef = useRef<HTMLImageElement | null>(null);
+  const lastMobileScrollYRef = useRef(0);
+  const mobileHeaderHiddenRef = useRef(false);
   const userInitial = (profileInfo?.name ?? profileInfo?.username ?? "?")
     .trim()
     .charAt(0)
@@ -907,12 +967,35 @@ export default function App() {
   const rawPathname = window.location.pathname || "/";
   const appBasePath = detectAppBase(rawPathname, import.meta.env.VITE_APP_BASE);
   const pathname = stripAppBase(rawPathname, appBasePath);
+  const canonicalPathname = pathname === "/lobby"
+    ? "/profile"
+    : pathname.startsWith("/lobby/")
+      ? pathname.replace("/lobby", "/profile")
+      : pathname;
   const appHref = (path: string) => withAppBase(path, appBasePath);
-  const isProfilePage = pathname === "/" || pathname.startsWith("/profile");
-  const isSettingsPage = pathname.startsWith("/settings") || pathname.startsWith("/background");
-  const isHumanDesignPage = pathname.startsWith("/human-design");
-  const isGamesPage = pathname.startsWith("/games") || pathname.startsWith("/lobby") || pathname.startsWith("/blackjack");
-  const isTarotPage = pathname.startsWith("/tarot");
+  const isSilentDiscoRoot = appBasePath === "/silent-disco" && canonicalPathname === "/";
+  const silentDiscoEntryPath = appBasePath === "/silent-disco" ? "/" : "/silent-disco";
+  const homeHref = SPUTNET_HOME_URL;
+  const isProfilePage = !isSilentDiscoRoot && (canonicalPathname === "/" || canonicalPathname.startsWith("/profile"));
+  const isSettingsPage = canonicalPathname.startsWith("/settings") || canonicalPathname.startsWith("/background");
+  const isHumanDesignPage = canonicalPathname.startsWith("/human-design");
+  const isGamesPage = canonicalPathname.startsWith("/games") || canonicalPathname.startsWith("/blackjack");
+  const isTarotPage = canonicalPathname.startsWith("/tarot");
+  const isSilentDiscoPage = isSilentDiscoRoot || canonicalPathname.startsWith("/silent-disco");
+  const pageThemeKey = isTarotPage
+    ? "tarot"
+    : isHumanDesignPage
+      ? "human-design"
+      : isSilentDiscoPage
+        ? "games"
+      : isSettingsPage
+        ? "settings"
+        : isProfilePage
+          ? "profile"
+          : isGamesPage
+            ? "games"
+            : "default";
+  const appThemeClass = `app--${pageThemeKey}`;
   const ytzyBase = (import.meta.env.VITE_YTZY_URL || "https://sputnet.world/yatzy").trim();
   const profileAvatarApiUrl = useMemo(() => {
     const base = (import.meta.env.VITE_API_URL || "").trim();
@@ -925,7 +1008,7 @@ export default function App() {
     [avatarVersion, profileAvatarApiUrl]
   );
   const hdPageUserId = isHumanDesignPage
-    ? pathname.replace("/human-design", "").replace(/^\/+/, "")
+    ? canonicalPathname.replace("/human-design", "").replace(/^\/+/, "")
     : "";
   const [showEditForm, setShowEditForm] = useState(false);
   const isSwedish = useMemo(() => isSwedishLocale(oracleLanguage), [oracleLanguage]);
@@ -969,6 +1052,82 @@ export default function App() {
         .trim(),
     []
   );
+  useEffect(() => {
+    if (pathname === canonicalPathname) return;
+    window.location.replace(withAppBase(canonicalPathname, appBasePath));
+  }, [appBasePath, canonicalPathname, pathname]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mobileQuery = window.matchMedia("(max-width: 920px)");
+    const minDelta = 8;
+    const revealNearTop = 48;
+    let raf = 0;
+
+    const setHeaderHidden = (hidden: boolean) => {
+      if (mobileHeaderHiddenRef.current === hidden) return;
+      mobileHeaderHiddenRef.current = hidden;
+      setIsMobileHeaderHidden(hidden);
+    };
+
+    const evaluate = () => {
+      const y = Math.max(0, window.scrollY || window.pageYOffset || 0);
+      const delta = y - lastMobileScrollYRef.current;
+
+      if (!mobileQuery.matches) {
+        setHeaderHidden(false);
+        lastMobileScrollYRef.current = y;
+        return;
+      }
+
+      if (y <= revealNearTop) {
+        setHeaderHidden(false);
+        lastMobileScrollYRef.current = y;
+        return;
+      }
+
+      if (Math.abs(delta) < minDelta) return;
+
+      setHeaderHidden(delta > 0);
+      lastMobileScrollYRef.current = y;
+    };
+
+    const onScroll = () => {
+      if (raf) return;
+      raf = window.requestAnimationFrame(() => {
+        raf = 0;
+        evaluate();
+      });
+    };
+
+    const onViewportChange = () => {
+      lastMobileScrollYRef.current = Math.max(0, window.scrollY || window.pageYOffset || 0);
+      evaluate();
+    };
+
+    lastMobileScrollYRef.current = Math.max(0, window.scrollY || window.pageYOffset || 0);
+    evaluate();
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onViewportChange);
+    if (typeof mobileQuery.addEventListener === "function") {
+      mobileQuery.addEventListener("change", onViewportChange);
+    } else {
+      mobileQuery.addListener(onViewportChange);
+    }
+
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onViewportChange);
+      if (typeof mobileQuery.removeEventListener === "function") {
+        mobileQuery.removeEventListener("change", onViewportChange);
+      } else {
+        mobileQuery.removeListener(onViewportChange);
+      }
+      if (raf) window.cancelAnimationFrame(raf);
+    };
+  }, []);
+
   const findBestVoiceOption = useCallback(
     (transcript: string, options: string[]): string | null => {
       const normalizedTranscript = normalizeSpeechLabel(transcript);
@@ -1260,6 +1419,17 @@ export default function App() {
   useEffect(() => {
     if (typeof document === "undefined") return;
     const className = "tarot-cinema-body";
+    const themeClasses = [
+      "sputnet-theme--default",
+      "sputnet-theme--games",
+      "sputnet-theme--profile",
+      "sputnet-theme--settings",
+      "sputnet-theme--human-design",
+      "sputnet-theme--tarot",
+    ];
+    const nextThemeClass = `sputnet-theme--${pageThemeKey}`;
+    themeClasses.forEach((themeClass) => document.body.classList.remove(themeClass));
+    document.body.classList.add(nextThemeClass);
     if (isTarotPage) {
       document.body.classList.add(className);
     } else {
@@ -1267,8 +1437,9 @@ export default function App() {
     }
     return () => {
       document.body.classList.remove(className);
+      document.body.classList.remove(nextThemeClass);
     };
-  }, [isTarotPage]);
+  }, [isTarotPage, pageThemeKey]);
   const houseRows = useMemo(() => {
     const houses = insights?.astrology_json?.houses;
     const cusps = Array.isArray(houses?.cusps) ? houses.cusps : [];
@@ -3798,7 +3969,7 @@ export default function App() {
         `Klubbnivå: ${localizeMembershipTier(membership?.tier)}. ${aiMembershipUnlocked ? "AI är upplåst." : membership?.active ? "Medlemskapet är aktivt." : "Aktivera medlemskap för att låsa upp AI och vänner."}`,
         `Club tier: ${localizeMembershipTier(membership?.tier)}. ${aiMembershipUnlocked ? "AI is unlocked." : membership?.active ? "Membership is active." : "Activate membership to unlock AI and friends."}`
       );
-  const showLobbyBack = !pathname.startsWith("/lobby") && !pathname.startsWith("/games");
+  const showLobbyBack = !canonicalPathname.startsWith("/games");
   const defaultBirthDate = useMemo(() => {
     const d = new Date();
     d.setFullYear(d.getFullYear() - 26);
@@ -4223,14 +4394,14 @@ export default function App() {
     <style>
       @import url("https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Space+Grotesk:wght@400;500;600&display=swap");
       :root {
-        --shell: linear-gradient(135deg, #17192f 0%, #1f1430 58%, #382619 100%);
-        --bg: #efe5d4;
-        --card: rgba(255, 255, 255, 0.05);
-        --line: rgba(255, 255, 255, 0.12);
-        --ink: #f4ebdc;
-        --muted: #d9d0c2;
-        --warm: #ffdca8;
-        --accent: #db4a2b;
+        --shell: linear-gradient(135deg, #0c0614 0%, #1a0b2a 58%, #2a0d33 100%);
+        --bg: #05020a;
+        --card: rgba(255, 255, 255, 0.04);
+        --line: rgba(255, 105, 180, 0.18);
+        --ink: #fff2fb;
+        --muted: rgba(255, 229, 244, 0.72);
+        --warm: #ff97d8;
+        --accent: #ff4fb8;
       }
       * {
         box-sizing: border-box;
@@ -4244,7 +4415,10 @@ export default function App() {
       html, body {
         margin: 0;
         min-height: 100%;
-        background: var(--bg);
+        background:
+          radial-gradient(1200px 640px at 12% -10%, rgba(255, 79, 184, 0.16), transparent 58%),
+          radial-gradient(960px 680px at 100% 0%, rgba(141, 77, 255, 0.18), transparent 56%),
+          var(--bg);
         color: var(--ink);
       }
       body {
@@ -4257,22 +4431,22 @@ export default function App() {
       }
       .shell {
         background: var(--shell);
-        border: 1px solid rgba(63, 55, 79, 0.92);
+        border: 1px solid var(--line);
         border-radius: 28px;
         padding: 28px;
-        box-shadow: 0 26px 80px rgba(19, 15, 24, 0.28);
+        box-shadow: 0 26px 80px rgba(0, 0, 0, 0.36);
       }
       .eyebrow {
         margin: 0 0 10px;
         font-size: 12px;
         letter-spacing: 0.18em;
         text-transform: uppercase;
-        color: #f0c88f;
+        color: var(--warm);
       }
       h1, h2, h3 {
         margin: 0;
         font-family: "Fraunces", Georgia, serif;
-        color: #fff1d9;
+        color: #fff7fd;
       }
       h1 {
         font-size: clamp(2.4rem, 5vw, 3.9rem);
@@ -4326,7 +4500,7 @@ export default function App() {
         margin: 0;
         font-size: 1.8rem;
         line-height: 1.18;
-        color: #fff3de;
+        color: #fff7fd;
         font-family: "Fraunces", Georgia, serif;
         font-weight: 700;
       }
@@ -4357,8 +4531,8 @@ export default function App() {
         align-items: center;
         padding: 6px 10px;
         border-radius: 999px;
-        background: rgba(255, 214, 144, 0.12);
-        border: 1px solid rgba(255, 214, 144, 0.2);
+        background: rgba(255, 79, 184, 0.12);
+        border: 1px solid rgba(255, 79, 184, 0.2);
         color: var(--warm);
         font-size: 0.9rem;
         white-space: nowrap;
@@ -5534,10 +5708,10 @@ export default function App() {
 
   return (
     <>
-      <header className="homeHud">
+      <header className={`homeHud${isMobileHeaderHidden ? " homeHud--mobileHidden" : ""}`}>
         <div className="homeHud__inner">
-          <a className="homeHud__brand" href={appHref("/lobby")}>
-            STARDOM HOME
+          <a className="homeHud__brand" href={homeHref}>
+            SPUTNET WORLD
           </a>
 
           <a className="homeHudMe" href={appHref("/profile")} title={homeHudName || tr("Din profil", "Your profile")}>
@@ -5586,31 +5760,34 @@ export default function App() {
             </a>
             <a
               className={["homeHudStat", homeHudGames > 0 ? "homeHudStat--active" : ""].join(" ")}
-              href={appHref("/lobby")}
+              href={appHref("/profile")}
             >
               {tr("Pågående spel", "Active games")} <b>{homeHudGames}</b>
             </a>
           </div>
 
           {showLobbyBack ? (
-            <a className="homeHudBack" href={appHref("/lobby")}>
-              {tr("Till Stardom", "Back to Stardom")}
+            <a className="homeHudBack" href={homeHref}>
+              {tr("Till hem", "Back home")}
             </a>
           ) : null}
         </div>
         <div className="homeHudNav">
           <div className="homeHudNav__links">
-            <a className={isGamesPage ? "homeHudNavLink active" : "homeHudNavLink"} href={appHref("/lobby")}>
-              {tr("Stardom", "Stardom")}
+            <a className={isGamesPage ? "homeHudNavLink active" : "homeHudNavLink"} href={homeHref}>
+              {tr("Hem", "Home")}
             </a>
             <a className={isTarotPage ? "homeHudNavLink active" : "homeHudNavLink"} href={appHref("/tarot/oracle")}>
               {tr("Tarot", "Tarot")}
             </a>
+            <a className={isSilentDiscoPage ? "homeHudNavLink active" : "homeHudNavLink"} href={appHref(silentDiscoEntryPath)}>
+              Silent Disco
+            </a>
             <a className={isProfilePage ? "homeHudNavLink active" : "homeHudNavLink"} href={appHref("/profile")}>
-              {tr("Profile", "Profile")}
+              {tr("Profil", "Profile")}
             </a>
             <a className={isSettingsPage ? "homeHudNavLink active" : "homeHudNavLink"} href={appHref("/settings")}>
-              {tr("Settings", "Settings")}
+              {tr("Inställningar", "Settings")}
             </a>
           </div>
           <label className="homeHudLang">
@@ -5630,7 +5807,7 @@ export default function App() {
         </div>
       </header>
 
-      <main className={`app ${isTarotPage ? "app-tarot-cinema" : ""}`}>
+      <main className={`app ${isTarotPage ? "app-tarot-cinema" : ""} ${appThemeClass}`.trim()}>
       {!isProfilePage && modal ? (
         <div
           className="modal-backdrop"
@@ -6005,8 +6182,8 @@ export default function App() {
                 </div>
                 <p className="help-text">
                   {tr(
-                    "Byt avatar här så slår den igenom i Stardom, Yatzy och resten av Sputnet.",
-                    "Change your avatar here and it will carry across Stardom, Yatzy, and the rest of Sputnet."
+                    "Byt avatar här så slår den igenom i hela Sputnet, inklusive Yatzy.",
+                    "Change your avatar here and it will carry across all of Sputnet, including Yatzy."
                   )}
                 </p>
               </div>
@@ -7841,6 +8018,10 @@ export default function App() {
         </div>
       ) : null}
 
+      {isSilentDiscoPage ? (
+        <SilentDiscoPage appBasePath={appBasePath} appHref={appHref} tr={tr} displayName={homeHudName} />
+      ) : null}
+
       {isSettingsPage ? (
         <section className="profile-card background-card">
           <div className="profile-header">
@@ -8109,8 +8290,8 @@ export default function App() {
       {isGamesPage ? (
       <>
         <header className="hero">
-        <p className="eyebrow">STARDOM</p>
-        <h1>{tr("Stardom Lobby", "Stardom Lobby")}</h1>
+        <p className="eyebrow">SPUTNET</p>
+        <h1>{tr("Sputnet-spel", "Sputnet Games")}</h1>
         <p className="lead">
           {tr(
             "Astrologi, tarot och kinesisk zodiak i samma nav som dina sociala matcher.",
@@ -8209,7 +8390,7 @@ export default function App() {
         </article>
         <article className="card">
           <h2>{tr("Yatzy Arena", "Yatzy Arena")}</h2>
-          <p>{tr("Starta Yatzy direkt från Stardom när spelhumöret slår till.", "Launch Yatzy directly from Stardom whenever game mode kicks in.")}</p>
+          <p>{tr("Starta Yatzy direkt från Sputnet när spelhumöret slår till.", "Launch Yatzy directly from Sputnet whenever game mode kicks in.")}</p>
           <a className="btn-link" href={ytzyBase} target="_blank" rel="noreferrer">
             {tr("Öppna Ytzy", "Open Ytzy")}
           </a>
@@ -8228,19 +8409,42 @@ export default function App() {
         {players.length === 0 ? (
           <p>{tr("Inga spelare anslutna.", "No players connected.")}</p>
         ) : (
-          <ul>
+          <ul className="chicken-grid">
             {players.map((p, idx) => {
               const isReady = readySet.has(p.userId);
               const seat = ["P1", "P2", "P3", "P4", "P5", "P6"][idx] ?? "-";
+              const challengeChoices = getChickenChallengesForSeat(idx);
               return (
-                <li key={p.userId}>
-                  <span className={isReady ? "ready-chip" : "ready-chip off"}>
-                    {isReady ? tr("Redo", "Ready") : tr("Inte redo", "Not ready")}
-                  </span>
-                  <span className="player-seat">{seat}</span>
-                  <span className="player-id">{p.userId}</span>
-                  <span className="player-stack">{tr("Stack", "Stack")}: {p.stack}</span>
-                  <span className="you-tag">{selfId === p.userId ? "(Du)" : ""}</span>
+                <li key={p.userId} className="chicken-card">
+                  <div className="chicken-card__header">
+                    <div className="chicken-card__identity">
+                      <span className="chicken-card__bird" aria-hidden="true">🐔</span>
+                      <div className="chicken-card__identity-copy">
+                        <span className="chicken-card__title">{tr("Kyckling", "Chicken")} {seat}</span>
+                        <span className="player-id">{p.userId}</span>
+                      </div>
+                    </div>
+                    <span className={isReady ? "ready-chip" : "ready-chip off"}>
+                      {isReady ? tr("Redo", "Ready") : tr("Inte redo", "Not ready")}
+                    </span>
+                  </div>
+                  <div className="chicken-card__meta">
+                    <span className="player-seat">{seat}</span>
+                    <span className="player-stack">{tr("Stack", "Stack")}: {p.stack}</span>
+                    {selfId === p.userId ? <span className="you-tag">{tr("Det här är du", "This one is you")}</span> : null}
+                  </div>
+                  <div className="chicken-card__challenge-block">
+                    <span className="chicken-card__challenge-title">{tr("Möjliga kompisutmaningar", "Possible friend challenges")}</span>
+                    <ul className="chicken-card__challenge-list">
+                      {challengeChoices.map((challenge) => (
+                        <li key={`${p.userId}-${challenge.labelEn}`}>
+                          <span className="chicken-card__challenge-icon" aria-hidden="true">{challenge.icon}</span>
+                          <span className="chicken-card__challenge-text">{tr(challenge.labelSv, challenge.labelEn)}</span>
+                          <span className="chicken-card__points">+{challenge.points} {tr("poäng", "pts")}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 </li>
               );
             })}

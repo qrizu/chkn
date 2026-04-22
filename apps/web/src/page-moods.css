@@ -1,0 +1,397 @@
+body {
+  --page-accent-a: #ff4fb8;
+  --page-accent-b: #8d4dff;
+  --page-glow-a: rgba(255, 79, 184, 0.18);
+  --page-glow-b: rgba(141, 77, 255, 0.22);
+  --page-glow-c: rgba(99, 35, 145, 0.14);
+  --page-panel-a: rgba(255, 79, 184, 0.14);
+  --page-panel-b: rgba(141, 77, 255, 0.18);
+  --page-line: rgba(255, 105, 180, 0.22);
+  background:
+    radial-gradient(1200px 680px at 10% -10%, var(--page-glow-a), transparent 55%),
+    radial-gradient(960px 640px at 100% 0%, var(--page-glow-b), transparent 52%),
+    radial-gradient(900px 700px at 50% 100%, var(--page-glow-c), transparent 60%),
+    linear-gradient(180deg, #05020a 0%, #09030f 44%, #12051d 100%);
+}
+
+body.sputnet-theme--games {
+  --page-accent-a: #ff4fb8;
+  --page-accent-b: #8d4dff;
+  --page-glow-a: rgba(255, 79, 184, 0.24);
+  --page-glow-b: rgba(141, 77, 255, 0.2);
+  --page-glow-c: rgba(255, 114, 199, 0.12);
+  --page-panel-a: rgba(255, 79, 184, 0.2);
+  --page-panel-b: rgba(141, 77, 255, 0.16);
+}
+
+body.sputnet-theme--profile {
+  --page-accent-a: #ff7dc7;
+  --page-accent-b: #b06cff;
+  --page-glow-a: rgba(255, 125, 199, 0.18);
+  --page-glow-b: rgba(176, 108, 255, 0.18);
+  --page-glow-c: rgba(255, 196, 236, 0.08);
+  --page-panel-a: rgba(255, 125, 199, 0.11);
+  --page-panel-b: rgba(176, 108, 255, 0.12);
+}
+
+body.sputnet-theme--settings {
+  --page-accent-a: #ff38c7;
+  --page-accent-b: #702dff;
+  --page-glow-a: rgba(255, 56, 199, 0.2);
+  --page-glow-b: rgba(112, 45, 255, 0.24);
+  --page-glow-c: rgba(226, 112, 255, 0.1);
+  --page-panel-a: rgba(255, 56, 199, 0.15);
+  --page-panel-b: rgba(112, 45, 255, 0.18);
+}
+
+body.sputnet-theme--human-design {
+  --page-accent-a: #d784ff;
+  --page-accent-b: #ff4fb8;
+  --page-glow-a: rgba(215, 132, 255, 0.22);
+  --page-glow-b: rgba(255, 79, 184, 0.16);
+  --page-glow-c: rgba(137, 94, 255, 0.14);
+  --page-panel-a: rgba(215, 132, 255, 0.16);
+  --page-panel-b: rgba(255, 79, 184, 0.12);
+}
+
+body.sputnet-theme--tarot {
+  --page-accent-a: #ff4fb8;
+  --page-accent-b: #5e2bff;
+  --page-glow-a: rgba(255, 79, 184, 0.16);
+  --page-glow-b: rgba(94, 43, 255, 0.28);
+  --page-glow-c: rgba(186, 88, 255, 0.12);
+  --page-panel-a: rgba(255, 79, 184, 0.14);
+  --page-panel-b: rgba(94, 43, 255, 0.24);
+}
+
+body[class*="sputnet-theme--"] .btn-primary,
+body[class*="sputnet-theme--"] .homeHudNavLink.active,
+body[class*="sputnet-theme--"] .nav-link.active,
+body[class*="sputnet-theme--"] .avatar-style-choice.active {
+  background: linear-gradient(90deg, var(--page-accent-a), var(--page-accent-b));
+  color: #170513;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.26);
+}
+
+body[class*="sputnet-theme--"] .homeHud,
+body[class*="sputnet-theme--"] .modal,
+body[class*="sputnet-theme--"] .profile-card,
+body[class*="sputnet-theme--"] .summary-card,
+body[class*="sputnet-theme--"] .card,
+body[class*="sputnet-theme--"] .background-card,
+body[class*="sputnet-theme--"] .hd-card,
+body[class*="sputnet-theme--"] .blackjack {
+  border-color: var(--page-line);
+}
+
+.app--games .hero,
+.app--games .card,
+.app--games .blackjack {
+  background:
+    radial-gradient(520px 240px at 12% 0%, var(--page-panel-a), transparent 58%),
+    radial-gradient(420px 260px at 96% 12%, var(--page-panel-b), transparent 62%),
+    linear-gradient(160deg, rgba(15, 8, 24, 0.96), rgba(11, 6, 18, 0.92));
+  border-color: var(--page-line);
+}
+
+.app--games .hero {
+  box-shadow:
+    0 28px 56px rgba(0, 0, 0, 0.34),
+    0 0 0 1px rgba(255, 255, 255, 0.02) inset;
+}
+
+.app--games .card:nth-child(2n) {
+  transform: rotate(-0.7deg);
+}
+
+.app--games .card:nth-child(2n + 1) {
+  transform: rotate(0.6deg);
+}
+
+.app--games .card:hover {
+  transform: translateY(-3px) scale(1.01) rotate(0deg);
+}
+
+.app--profile .profile-card,
+.app--profile .summary-card,
+.app--profile .profile-field,
+.app--profile .social-metric,
+.app--profile .avatar-editor-card,
+.app--profile .avatar-editor-preview {
+  background:
+    radial-gradient(420px 220px at 0% 0%, var(--page-panel-a), transparent 58%),
+    radial-gradient(360px 220px at 100% 10%, var(--page-panel-b), transparent 60%),
+    linear-gradient(165deg, rgba(17, 8, 27, 0.96), rgba(12, 6, 20, 0.94));
+  border-color: var(--page-line);
+}
+
+.app--profile .profile-card::after {
+  background:
+    radial-gradient(380px 220px at 8% 8%, rgba(255, 170, 224, 0.2), transparent 68%),
+    radial-gradient(320px 180px at 90% 0%, rgba(176, 108, 255, 0.14), transparent 70%);
+}
+
+.app--profile .summary-item,
+.app--profile .membership-pill,
+.app--profile .friend-chip {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.app--settings .background-card,
+.app--settings .background-block,
+.app--settings .profile-card {
+  background:
+    linear-gradient(135deg, rgba(18, 9, 32, 0.96), rgba(10, 7, 21, 0.94)),
+    linear-gradient(45deg, transparent 0 46%, rgba(255, 56, 199, 0.08) 46% 52%, transparent 52% 100%);
+  border-color: var(--page-line);
+}
+
+.app--settings .background-block {
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.app--settings .profile-header,
+.app--settings .profile-actions {
+  position: relative;
+}
+
+.app--settings .profile-header::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 120px;
+  height: 120px;
+  background: radial-gradient(circle, rgba(255, 56, 199, 0.14), transparent 70%);
+  pointer-events: none;
+}
+
+.app--human-design .profile-card.profile-extras,
+.app--human-design .hd-card,
+.app--human-design .hd-modal,
+.app--human-design .hd-report-frame {
+  border-color: var(--page-line);
+  background:
+    radial-gradient(420px 220px at 10% 0%, var(--page-panel-a), transparent 60%),
+    radial-gradient(360px 240px at 92% 6%, var(--page-panel-b), transparent 62%),
+    linear-gradient(160deg, rgba(14, 8, 28, 0.96), rgba(9, 6, 18, 0.94));
+}
+
+.app--human-design .hd-report-frame {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 18px 34px rgba(0, 0, 0, 0.28);
+}
+
+.app--human-design .hd-card h2,
+.app--human-design .eyebrow {
+  color: #f0cfff;
+}
+
+body.sputnet-theme--tarot .madame-cinema {
+  background:
+    radial-gradient(circle at 16% 12%, rgba(255, 79, 184, 0.2), rgba(0, 0, 0, 0) 36%),
+    radial-gradient(circle at 82% 82%, rgba(94, 43, 255, 0.22), rgba(0, 0, 0, 0) 42%),
+    linear-gradient(175deg, #040405 0%, #000 45%, #13041e 100%);
+}
+
+body.sputnet-theme--tarot .madame-intro,
+body.sputnet-theme--tarot .madame-panel,
+body.sputnet-theme--tarot .tarot-reading-stage,
+body.sputnet-theme--tarot .tarot-oracle-chat,
+body.sputnet-theme--tarot .tarot-cinematic-intro,
+body.sputnet-theme--tarot .tarot-reading-card-front,
+body.sputnet-theme--tarot .tarot-card-viewer-front {
+  border-color: var(--page-line);
+}
+
+body.sputnet-theme--tarot .madame-intro-fallback,
+body.sputnet-theme--tarot .tarot-intro-fallback,
+body.sputnet-theme--tarot .tarot-reading-card-back,
+body.sputnet-theme--tarot .tarot-card-viewer-back {
+  background:
+    radial-gradient(circle at 32% 20%, rgba(255, 79, 184, 0.24), rgba(0, 0, 0, 0) 44%),
+    linear-gradient(160deg, rgba(15, 10, 34, 0.95), rgba(45, 10, 66, 0.92));
+}
+
+.app--games .players {
+  background:
+    radial-gradient(540px 240px at 8% 0%, rgba(255, 79, 184, 0.16), transparent 60%),
+    radial-gradient(420px 240px at 100% 10%, rgba(141, 77, 255, 0.18), transparent 62%),
+    linear-gradient(165deg, rgba(14, 8, 24, 0.94), rgba(9, 5, 17, 0.94));
+}
+
+.app--games .players ul.chicken-grid {
+  list-style: none;
+  padding-left: 0;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.app--games .players li.chicken-card {
+  margin-bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 121, 194, 0.18);
+  background:
+    radial-gradient(260px 160px at 0% 0%, rgba(255, 79, 184, 0.16), transparent 64%),
+    radial-gradient(220px 180px at 100% 10%, rgba(141, 77, 255, 0.18), transparent 66%),
+    linear-gradient(160deg, rgba(21, 10, 32, 0.96), rgba(10, 6, 18, 0.94));
+  box-shadow:
+    0 20px 38px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.app--games .players li.chicken-card:nth-child(2n) {
+  transform: rotate(-0.8deg);
+}
+
+.app--games .players li.chicken-card:nth-child(3n) {
+  transform: rotate(0.9deg);
+}
+
+.app--games .players li.chicken-card:hover {
+  transform: translateY(-3px) scale(1.01) rotate(0deg);
+  border-color: rgba(255, 121, 194, 0.34);
+  box-shadow:
+    0 28px 44px rgba(0, 0, 0, 0.3),
+    0 0 28px rgba(255, 79, 184, 0.12);
+}
+
+.app--games .chicken-card__header,
+.app--games .chicken-card__identity,
+.app--games .chicken-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.app--games .chicken-card__header {
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.app--games .chicken-card__identity {
+  min-width: 0;
+}
+
+.app--games .chicken-card__bird {
+  width: 46px;
+  height: 46px;
+  flex: 0 0 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  font-size: 1.35rem;
+  background: linear-gradient(145deg, rgba(255, 79, 184, 0.3), rgba(141, 77, 255, 0.24));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.app--games .chicken-card__identity-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.app--games .chicken-card__title {
+  color: #fff5fd;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 0.84rem;
+}
+
+.app--games .chicken-card__meta {
+  flex-wrap: wrap;
+}
+
+.app--games .chicken-card__meta .you-tag {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.app--games .chicken-card__challenge-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.app--games .chicken-card__challenge-title {
+  color: #ffd9f0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.app--games .players .chicken-card__challenge-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+
+.app--games .players .chicken-card__challenge-list li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.app--games .chicken-card__challenge-icon {
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.app--games .chicken-card__challenge-text {
+  color: #fbe8f8;
+  line-height: 1.4;
+}
+
+.app--games .chicken-card__points {
+  white-space: nowrap;
+  align-self: center;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(255, 79, 184, 0.28), rgba(141, 77, 255, 0.24));
+  border: 1px solid rgba(255, 121, 194, 0.2);
+  color: #fff3fb;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+@media (max-width: 640px) {
+  .app--games .players li.chicken-card {
+    padding: 16px;
+  }
+
+  .app--games .chicken-card__header {
+    flex-direction: column;
+  }
+
+  .app--games .players .chicken-card__challenge-list li {
+    grid-template-columns: auto 1fr;
+  }
+
+  .app--games .chicken-card__points {
+    grid-column: 2;
+    justify-self: start;
+  }
+}

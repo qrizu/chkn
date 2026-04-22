@@ -9,6 +9,1097 @@
   --shadow: rgba(0, 0, 0, 0.12);
 }
 
+/* Sputnet world theme override */
+:root {
+  --bg: #05020a;
+  --ink: #fff2fb;
+  --accent: #ff4fb8;
+  --accent-2: #8d4dff;
+  --card: rgba(19, 11, 28, 0.84);
+  --shadow: rgba(0, 0, 0, 0.48);
+  --panel: rgba(18, 10, 29, 0.88);
+  --panel-soft: rgba(24, 14, 38, 0.82);
+  --panel-strong: rgba(10, 5, 18, 0.94);
+  --line: rgba(255, 105, 180, 0.22);
+  --line-strong: rgba(255, 151, 216, 0.42);
+  --pink-soft: #ff97d8;
+  --purple: #8d4dff;
+  --purple-soft: #d1b6ff;
+  --muted: rgba(255, 229, 244, 0.72);
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  color: var(--ink);
+  background:
+    radial-gradient(1200px 680px at 10% -10%, rgba(255, 79, 184, 0.18), transparent 55%),
+    radial-gradient(960px 640px at 100% 0%, rgba(141, 77, 255, 0.22), transparent 52%),
+    radial-gradient(900px 700px at 50% 100%, rgba(99, 35, 145, 0.14), transparent 60%),
+    linear-gradient(180deg, #05020a 0%, #09030f 44%, #12051d 100%);
+}
+
+body.tarot-cinema-body {
+  color: var(--ink);
+  background:
+    radial-gradient(900px 520px at 12% 0%, rgba(255, 79, 184, 0.16), transparent 54%),
+    radial-gradient(820px 540px at 88% 8%, rgba(141, 77, 255, 0.2), transparent 56%),
+    linear-gradient(180deg, #040209 0%, #09030f 42%, #12051d 100%);
+}
+
+.top-nav,
+.homeHud {
+  border-color: var(--line);
+  background: linear-gradient(180deg, rgba(6, 3, 12, 0.96), rgba(6, 3, 12, 0.84));
+  color: var(--ink);
+}
+
+.top-nav,
+.nav-link,
+.homeHud__brand,
+.homeHudMe,
+.homeHudStat,
+.homeHudBack,
+.homeHudNavLink,
+.homeHudLang__select,
+.profile-badge,
+.pill,
+.btn-link,
+.btn-ghost,
+.tarot-spread-btn.active,
+.tarot-viewer-close,
+.modal-close {
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ink);
+}
+
+.nav-link.active,
+.homeHudNavLink.active {
+  background: linear-gradient(90deg, var(--accent), #ff7dc7 55%, var(--purple));
+  border-color: transparent;
+  color: #170513;
+}
+
+.homeHud__brand:hover,
+.homeHudMe:hover,
+.homeHudStat:hover,
+.homeHudBack:hover,
+.homeHudNavLink:hover,
+.nav-link:hover,
+.btn-ghost:hover,
+.btn-link:hover,
+.modal-close:hover,
+.tarot-viewer-close:hover {
+  border-color: var(--line-strong);
+  box-shadow: 0 0 0 2px rgba(255, 79, 184, 0.12);
+}
+
+.homeHudMe__avatar,
+.avatar-modal-image,
+.tarot-intro-image,
+.tarot-card-image,
+.tarot-card-viewer-front img,
+.tarot-reading-card-front img,
+.modal-image {
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.homeHudWallet {
+  border-color: var(--line);
+  background:
+    radial-gradient(120% 140% at 16% 0%, rgba(255, 79, 184, 0.22), rgba(255, 79, 184, 0) 56%),
+    rgba(255, 255, 255, 0.04);
+  color: var(--ink);
+}
+
+.homeHudWalletCoin {
+  border-color: rgba(255, 187, 230, 0.68);
+  background:
+    radial-gradient(circle at 34% 30%, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0.28) 30%, rgba(255, 255, 255, 0.04) 55%, rgba(255, 255, 255, 0) 65%),
+    linear-gradient(160deg, rgba(255, 151, 216, 0.96), rgba(141, 77, 255, 0.96));
+  box-shadow:
+    inset 0 0 0 1px rgba(70, 18, 74, 0.45),
+    0 2px 8px rgba(255, 79, 184, 0.28);
+  color: #fff2fb;
+}
+
+.homeHudWalletUnit,
+.homeHudLang span,
+.profile-field label,
+.help-text,
+.autocomplete-status,
+.map-header p,
+.summary-detail,
+.bj-label,
+.bj-meta,
+.modal-subtitle,
+.tarot-pref span,
+.homeHudNavLink,
+.homeHudStat,
+.top-nav,
+.player-seat,
+.you-tag {
+  color: var(--muted);
+}
+
+.homeHudWalletDelta {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.homeHudWallet--up .homeHudWalletDelta,
+.homeHudStat--active,
+.status.ok,
+.ready-chip,
+.ready-chip.off,
+.player-stack {
+  color: var(--purple-soft);
+  border-color: rgba(141, 77, 255, 0.36);
+  background: rgba(141, 77, 255, 0.16);
+}
+
+.homeHudWallet--down .homeHudWalletDelta,
+.homeHudStat--hot,
+.status.bad {
+  color: var(--pink-soft);
+  border-color: rgba(255, 79, 184, 0.34);
+  background: rgba(255, 79, 184, 0.14);
+}
+
+.profile-card,
+.profile-insights,
+.profile-social,
+.background-card,
+.hd-card,
+.blackjack,
+.modal,
+.tarot-card-viewer,
+.compatibility-hero,
+.compatibility-section-card,
+.compatibility-guidance,
+.compatibility-email-card {
+  color: var(--ink);
+  border-color: var(--line);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.42);
+  background:
+    radial-gradient(520px 240px at 10% 0%, rgba(255, 79, 184, 0.14), transparent 62%),
+    radial-gradient(460px 220px at 92% 0%, rgba(141, 77, 255, 0.18), transparent 66%),
+    linear-gradient(180deg, rgba(16, 8, 24, 0.96), rgba(11, 6, 18, 0.94));
+}
+
+.profile-card::after {
+  background:
+    radial-gradient(420px 220px at 10% 8%, rgba(255, 79, 184, 0.22), transparent 70%),
+    radial-gradient(360px 220px at 92% 0%, rgba(141, 77, 255, 0.18), transparent 72%);
+}
+
+.summary-card,
+.detail-card,
+.card,
+.log,
+.players,
+.debug,
+.profile-field,
+.autocomplete-list,
+.avatar-editor-card,
+.avatar-editor-preview,
+.tarot-oracle-chat,
+.tarot-cinematic-intro,
+.compatibility-mini-card,
+.compatibility-outro,
+.bj-hand,
+.sidebar-meta,
+.column-card,
+.entry {
+  color: var(--ink);
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.summary-card h3,
+.card h2,
+.players h3,
+.debug h3,
+.log h3,
+.profile-header h2,
+.modal-header h3,
+.hd-card h2,
+.map-header h3 {
+  color: #fff7fd;
+}
+
+.profile-field input,
+.flatpickr-input,
+.join-input,
+.homeHudLang__select,
+input,
+select,
+textarea {
+  background: rgba(7, 3, 14, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--ink);
+}
+
+.homeHudLang__select option {
+  background: #14081f;
+  color: var(--ink);
+}
+
+.profile-field input:focus,
+.flatpickr-input:focus,
+.join-input:focus,
+.homeHudLang__select:focus,
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 2px solid rgba(255, 79, 184, 0.34);
+  border-color: rgba(255, 151, 216, 0.55);
+}
+
+input,
+select,
+textarea {
+  accent-color: var(--accent);
+}
+
+.flatpickr-calendar {
+  background: var(--panel-strong);
+  border-color: var(--line);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.42);
+}
+
+.flatpickr-calendar,
+.flatpickr-days,
+.flatpickr-months,
+.flatpickr-weekdays,
+.flatpickr-time input,
+.flatpickr-current-month input.cur-year,
+.flatpickr-weekday,
+.flatpickr-day,
+.flatpickr-months .flatpickr-prev-month,
+.flatpickr-months .flatpickr-next-month {
+  color: var(--ink) !important;
+}
+
+.flatpickr-weekday,
+.flatpickr-current-month .flatpickr-monthDropdown-months {
+  color: var(--muted) !important;
+}
+
+.flatpickr-current-month .flatpickr-monthDropdown-months,
+.flatpickr-current-month input.cur-year:hover,
+.flatpickr-current-month .flatpickr-monthDropdown-months:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.flatpickr-day:hover {
+  background: rgba(141, 77, 255, 0.18);
+}
+
+.flatpickr-day.today {
+  border-color: rgba(255, 79, 184, 0.6);
+}
+
+.flatpickr-day.selected,
+.flatpickr-day.startRange,
+.flatpickr-day.endRange {
+  background: linear-gradient(135deg, var(--accent), var(--purple));
+  border-color: transparent;
+  color: #170513 !important;
+}
+
+.autocomplete-list li button {
+  color: var(--ink);
+}
+
+.autocomplete-list li button:hover {
+  background: rgba(255, 79, 184, 0.12);
+}
+
+.map-canvas,
+.leaflet-container {
+  background: linear-gradient(135deg, rgba(20, 9, 30, 0.95), rgba(9, 4, 16, 0.94));
+  border-color: var(--line);
+}
+
+.btn-primary {
+  background: linear-gradient(90deg, var(--accent), #ff7dc7 55%, var(--purple));
+  color: #170513;
+  box-shadow: 0 14px 30px rgba(255, 79, 184, 0.24);
+}
+
+.btn-link {
+  border-style: solid;
+  border-color: var(--line);
+  background: rgba(255, 79, 184, 0.08);
+  color: var(--ink);
+}
+
+.btn-primary:hover,
+.btn-ghost:hover,
+.btn-link:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.32);
+}
+
+.btn-primary:disabled,
+.btn-ghost:disabled,
+.btn-link:disabled {
+  box-shadow: none;
+}
+
+.status {
+  color: var(--ink);
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.blackjack {
+  background:
+    radial-gradient(circle at 12% 12%, rgba(255, 79, 184, 0.16), transparent 40%),
+    radial-gradient(circle at 88% 18%, rgba(141, 77, 255, 0.18), transparent 44%),
+    radial-gradient(circle at 30% 92%, rgba(255, 151, 216, 0.12), transparent 46%),
+    linear-gradient(135deg, rgba(11, 6, 18, 0.96), rgba(20, 9, 30, 0.94));
+}
+
+.bj-table::before {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 79, 184, 0),
+    rgba(255, 79, 184, 0.82),
+    rgba(141, 77, 255, 0.74),
+    rgba(255, 79, 184, 0)
+  );
+}
+
+.bj-card {
+  border-color: rgba(255, 151, 216, 0.22);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink);
+}
+
+.tarot-oracle-line.oracle {
+  background: rgba(141, 77, 255, 0.18);
+  border: 1px solid rgba(141, 77, 255, 0.34);
+}
+
+.tarot-oracle-line.user {
+  background: rgba(255, 79, 184, 0.16);
+  border: 1px solid rgba(255, 79, 184, 0.32);
+}
+
+.tarot-reading-stage {
+  border-color: var(--line);
+  background:
+    radial-gradient(circle at 20% 12%, rgba(255, 79, 184, 0.22), rgba(0, 0, 0, 0) 42%),
+    radial-gradient(circle at 82% 88%, rgba(141, 77, 255, 0.24), rgba(0, 0, 0, 0) 44%),
+    linear-gradient(rgba(6, 8, 18, 0.54), rgba(6, 8, 18, 0.72)),
+    url("/tarot/tarot_readings.png");
+}
+
+.tarot-intro-fallback,
+.tarot-shuffle-stack span,
+.tarot-reading-card-back,
+.tarot-card-viewer-back {
+  border-color: rgba(255, 255, 255, 0.18);
+  background:
+    radial-gradient(circle at 50% 32%, rgba(255, 151, 216, 0.3), rgba(8, 8, 20, 0) 46%),
+    linear-gradient(150deg, rgba(21, 10, 36, 0.92), rgba(50, 18, 72, 0.92));
+  box-shadow: inset 0 0 22px rgba(255, 79, 184, 0.18);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.tarot-reading-card-front,
+.tarot-card-viewer-front {
+  border-color: var(--line);
+  background: rgba(10, 6, 20, 0.92);
+}
+
+.tarot-reading-card.is-active-turn .tarot-reading-card-back {
+  border-color: var(--pink-soft);
+  box-shadow: 0 0 0 1px rgba(255, 79, 184, 0.45), inset 0 0 22px rgba(255, 79, 184, 0.3);
+}
+
+.tarot-card-hint,
+.compatibility-section-card__summary,
+.compatibility-email-card__text strong {
+  color: var(--pink-soft);
+}
+
+.modal-backdrop,
+.tarot-card-viewer-backdrop {
+  background: rgba(5, 2, 10, 0.8);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* Sputnet world page moods: EOF pass */
+body {
+  --page-accent-a: #ff4fb8;
+  --page-accent-b: #8d4dff;
+  --page-glow-a: rgba(255, 79, 184, 0.18);
+  --page-glow-b: rgba(141, 77, 255, 0.22);
+  --page-glow-c: rgba(99, 35, 145, 0.14);
+  --page-panel-a: rgba(255, 79, 184, 0.14);
+  --page-panel-b: rgba(141, 77, 255, 0.18);
+  --page-line: rgba(255, 105, 180, 0.22);
+  background:
+    radial-gradient(1200px 680px at 10% -10%, var(--page-glow-a), transparent 55%),
+    radial-gradient(960px 640px at 100% 0%, var(--page-glow-b), transparent 52%),
+    radial-gradient(900px 700px at 50% 100%, var(--page-glow-c), transparent 60%),
+    linear-gradient(180deg, #05020a 0%, #09030f 44%, #12051d 100%);
+}
+
+body.sputnet-theme--games {
+  --page-accent-a: #ff4fb8;
+  --page-accent-b: #8d4dff;
+  --page-glow-a: rgba(255, 79, 184, 0.24);
+  --page-glow-b: rgba(141, 77, 255, 0.2);
+  --page-glow-c: rgba(255, 114, 199, 0.12);
+  --page-panel-a: rgba(255, 79, 184, 0.2);
+  --page-panel-b: rgba(141, 77, 255, 0.16);
+}
+
+body.sputnet-theme--profile {
+  --page-accent-a: #ff7dc7;
+  --page-accent-b: #b06cff;
+  --page-glow-a: rgba(255, 125, 199, 0.18);
+  --page-glow-b: rgba(176, 108, 255, 0.18);
+  --page-glow-c: rgba(255, 196, 236, 0.08);
+  --page-panel-a: rgba(255, 125, 199, 0.11);
+  --page-panel-b: rgba(176, 108, 255, 0.12);
+}
+
+body.sputnet-theme--settings {
+  --page-accent-a: #ff38c7;
+  --page-accent-b: #702dff;
+  --page-glow-a: rgba(255, 56, 199, 0.2);
+  --page-glow-b: rgba(112, 45, 255, 0.24);
+  --page-glow-c: rgba(226, 112, 255, 0.1);
+  --page-panel-a: rgba(255, 56, 199, 0.15);
+  --page-panel-b: rgba(112, 45, 255, 0.18);
+}
+
+body.sputnet-theme--human-design {
+  --page-accent-a: #d784ff;
+  --page-accent-b: #ff4fb8;
+  --page-glow-a: rgba(215, 132, 255, 0.22);
+  --page-glow-b: rgba(255, 79, 184, 0.16);
+  --page-glow-c: rgba(137, 94, 255, 0.14);
+  --page-panel-a: rgba(215, 132, 255, 0.16);
+  --page-panel-b: rgba(255, 79, 184, 0.12);
+}
+
+body.sputnet-theme--tarot {
+  --page-accent-a: #ff4fb8;
+  --page-accent-b: #5e2bff;
+  --page-glow-a: rgba(255, 79, 184, 0.16);
+  --page-glow-b: rgba(94, 43, 255, 0.28);
+  --page-glow-c: rgba(186, 88, 255, 0.12);
+  --page-panel-a: rgba(255, 79, 184, 0.14);
+  --page-panel-b: rgba(94, 43, 255, 0.24);
+}
+
+body[class*="sputnet-theme--"] .btn-primary,
+body[class*="sputnet-theme--"] .homeHudNavLink.active,
+body[class*="sputnet-theme--"] .nav-link.active,
+body[class*="sputnet-theme--"] .avatar-style-choice.active {
+  background: linear-gradient(90deg, var(--page-accent-a), var(--page-accent-b));
+  color: #170513;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.26);
+}
+
+body[class*="sputnet-theme--"] .homeHud,
+body[class*="sputnet-theme--"] .modal,
+body[class*="sputnet-theme--"] .profile-card,
+body[class*="sputnet-theme--"] .summary-card,
+body[class*="sputnet-theme--"] .card,
+body[class*="sputnet-theme--"] .background-card,
+body[class*="sputnet-theme--"] .hd-card,
+body[class*="sputnet-theme--"] .blackjack {
+  border-color: var(--page-line);
+}
+
+.app--games .hero,
+.app--games .card,
+.app--games .blackjack {
+  background:
+    radial-gradient(520px 240px at 12% 0%, var(--page-panel-a), transparent 58%),
+    radial-gradient(420px 260px at 96% 12%, var(--page-panel-b), transparent 62%),
+    linear-gradient(160deg, rgba(15, 8, 24, 0.96), rgba(11, 6, 18, 0.92));
+  border-color: var(--page-line);
+}
+
+.app--games .hero {
+  box-shadow:
+    0 28px 56px rgba(0, 0, 0, 0.34),
+    0 0 0 1px rgba(255, 255, 255, 0.02) inset;
+}
+
+.app--games .card:nth-child(2n) {
+  transform: rotate(-0.7deg);
+}
+
+.app--games .card:nth-child(2n + 1) {
+  transform: rotate(0.6deg);
+}
+
+.app--games .card:hover {
+  transform: translateY(-3px) scale(1.01) rotate(0deg);
+}
+
+.app--profile .profile-card,
+.app--profile .summary-card,
+.app--profile .profile-field,
+.app--profile .social-metric,
+.app--profile .avatar-editor-card,
+.app--profile .avatar-editor-preview {
+  background:
+    radial-gradient(420px 220px at 0% 0%, var(--page-panel-a), transparent 58%),
+    radial-gradient(360px 220px at 100% 10%, var(--page-panel-b), transparent 60%),
+    linear-gradient(165deg, rgba(17, 8, 27, 0.96), rgba(12, 6, 20, 0.94));
+  border-color: var(--page-line);
+}
+
+.app--profile .profile-card::after {
+  background:
+    radial-gradient(380px 220px at 8% 8%, rgba(255, 170, 224, 0.2), transparent 68%),
+    radial-gradient(320px 180px at 90% 0%, rgba(176, 108, 255, 0.14), transparent 70%);
+}
+
+.app--profile .summary-item,
+.app--profile .membership-pill,
+.app--profile .friend-chip {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.app--settings .background-card,
+.app--settings .background-block,
+.app--settings .profile-card {
+  background:
+    linear-gradient(135deg, rgba(18, 9, 32, 0.96), rgba(10, 7, 21, 0.94)),
+    linear-gradient(45deg, transparent 0 46%, rgba(255, 56, 199, 0.08) 46% 52%, transparent 52% 100%);
+  border-color: var(--page-line);
+}
+
+.app--settings .background-block {
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.app--settings .profile-header,
+.app--settings .profile-actions {
+  position: relative;
+}
+
+.app--settings .profile-header::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 120px;
+  height: 120px;
+  background: radial-gradient(circle, rgba(255, 56, 199, 0.14), transparent 70%);
+  pointer-events: none;
+}
+
+.app--human-design .profile-card.profile-extras,
+.app--human-design .hd-card,
+.app--human-design .hd-modal,
+.app--human-design .hd-report-frame {
+  border-color: var(--page-line);
+  background:
+    radial-gradient(420px 220px at 10% 0%, var(--page-panel-a), transparent 60%),
+    radial-gradient(360px 240px at 92% 6%, var(--page-panel-b), transparent 62%),
+    linear-gradient(160deg, rgba(14, 8, 28, 0.96), rgba(9, 6, 18, 0.94));
+}
+
+.app--human-design .hd-report-frame {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 18px 34px rgba(0, 0, 0, 0.28);
+}
+
+.app--human-design .hd-card h2,
+.app--human-design .eyebrow {
+  color: #f0cfff;
+}
+
+body.sputnet-theme--tarot .madame-cinema {
+  background:
+    radial-gradient(circle at 16% 12%, rgba(255, 79, 184, 0.2), rgba(0, 0, 0, 0) 36%),
+    radial-gradient(circle at 82% 82%, rgba(94, 43, 255, 0.22), rgba(0, 0, 0, 0) 42%),
+    linear-gradient(175deg, #040405 0%, #000 45%, #13041e 100%);
+}
+
+body.sputnet-theme--tarot .madame-intro,
+body.sputnet-theme--tarot .madame-panel,
+body.sputnet-theme--tarot .tarot-reading-stage,
+body.sputnet-theme--tarot .tarot-oracle-chat,
+body.sputnet-theme--tarot .tarot-cinematic-intro,
+body.sputnet-theme--tarot .tarot-reading-card-front,
+body.sputnet-theme--tarot .tarot-card-viewer-front {
+  border-color: var(--page-line);
+}
+
+body.sputnet-theme--tarot .madame-intro-fallback,
+body.sputnet-theme--tarot .tarot-intro-fallback,
+body.sputnet-theme--tarot .tarot-reading-card-back,
+body.sputnet-theme--tarot .tarot-card-viewer-back {
+  background:
+    radial-gradient(circle at 32% 20%, rgba(255, 79, 184, 0.24), rgba(0, 0, 0, 0) 44%),
+    linear-gradient(160deg, rgba(15, 10, 34, 0.95), rgba(45, 10, 66, 0.92));
+}
+
+/* Sputnet world page moods: final pass */
+body {
+  --page-accent-a: #ff4fb8;
+  --page-accent-b: #8d4dff;
+  --page-glow-a: rgba(255, 79, 184, 0.18);
+  --page-glow-b: rgba(141, 77, 255, 0.22);
+  --page-glow-c: rgba(99, 35, 145, 0.14);
+  --page-panel-a: rgba(255, 79, 184, 0.14);
+  --page-panel-b: rgba(141, 77, 255, 0.18);
+  --page-line: rgba(255, 105, 180, 0.22);
+}
+
+body.sputnet-theme--games {
+  --page-accent-a: #ff4fb8;
+  --page-accent-b: #8d4dff;
+  --page-glow-a: rgba(255, 79, 184, 0.24);
+  --page-glow-b: rgba(141, 77, 255, 0.2);
+  --page-glow-c: rgba(255, 114, 199, 0.12);
+  --page-panel-a: rgba(255, 79, 184, 0.2);
+  --page-panel-b: rgba(141, 77, 255, 0.16);
+}
+
+body.sputnet-theme--profile {
+  --page-accent-a: #ff7dc7;
+  --page-accent-b: #b06cff;
+  --page-glow-a: rgba(255, 125, 199, 0.18);
+  --page-glow-b: rgba(176, 108, 255, 0.18);
+  --page-glow-c: rgba(255, 196, 236, 0.08);
+  --page-panel-a: rgba(255, 125, 199, 0.11);
+  --page-panel-b: rgba(176, 108, 255, 0.12);
+}
+
+body.sputnet-theme--settings {
+  --page-accent-a: #ff38c7;
+  --page-accent-b: #702dff;
+  --page-glow-a: rgba(255, 56, 199, 0.2);
+  --page-glow-b: rgba(112, 45, 255, 0.24);
+  --page-glow-c: rgba(226, 112, 255, 0.1);
+  --page-panel-a: rgba(255, 56, 199, 0.15);
+  --page-panel-b: rgba(112, 45, 255, 0.18);
+}
+
+body.sputnet-theme--human-design {
+  --page-accent-a: #d784ff;
+  --page-accent-b: #ff4fb8;
+  --page-glow-a: rgba(215, 132, 255, 0.22);
+  --page-glow-b: rgba(255, 79, 184, 0.16);
+  --page-glow-c: rgba(137, 94, 255, 0.14);
+  --page-panel-a: rgba(215, 132, 255, 0.16);
+  --page-panel-b: rgba(255, 79, 184, 0.12);
+}
+
+body.sputnet-theme--tarot {
+  --page-accent-a: #ff4fb8;
+  --page-accent-b: #5e2bff;
+  --page-glow-a: rgba(255, 79, 184, 0.16);
+  --page-glow-b: rgba(94, 43, 255, 0.28);
+  --page-glow-c: rgba(186, 88, 255, 0.12);
+  --page-panel-a: rgba(255, 79, 184, 0.14);
+  --page-panel-b: rgba(94, 43, 255, 0.24);
+}
+
+body {
+  background:
+    radial-gradient(1200px 680px at 10% -10%, var(--page-glow-a), transparent 55%),
+    radial-gradient(960px 640px at 100% 0%, var(--page-glow-b), transparent 52%),
+    radial-gradient(900px 700px at 50% 100%, var(--page-glow-c), transparent 60%),
+    linear-gradient(180deg, #05020a 0%, #09030f 44%, #12051d 100%);
+}
+
+body[class*="sputnet-theme--"] .btn-primary,
+body[class*="sputnet-theme--"] .homeHudNavLink.active,
+body[class*="sputnet-theme--"] .nav-link.active,
+body[class*="sputnet-theme--"] .avatar-style-choice.active {
+  background: linear-gradient(90deg, var(--page-accent-a), var(--page-accent-b));
+  color: #170513;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.26);
+}
+
+body[class*="sputnet-theme--"] .homeHud,
+body[class*="sputnet-theme--"] .modal,
+body[class*="sputnet-theme--"] .profile-card,
+body[class*="sputnet-theme--"] .summary-card,
+body[class*="sputnet-theme--"] .card,
+body[class*="sputnet-theme--"] .background-card,
+body[class*="sputnet-theme--"] .hd-card,
+body[class*="sputnet-theme--"] .blackjack {
+  border-color: var(--page-line);
+}
+
+.app--games .hero,
+.app--games .card,
+.app--games .blackjack {
+  background:
+    radial-gradient(520px 240px at 12% 0%, var(--page-panel-a), transparent 58%),
+    radial-gradient(420px 260px at 96% 12%, var(--page-panel-b), transparent 62%),
+    linear-gradient(160deg, rgba(15, 8, 24, 0.96), rgba(11, 6, 18, 0.92));
+  border-color: var(--page-line);
+}
+
+.app--games .hero {
+  box-shadow:
+    0 28px 56px rgba(0, 0, 0, 0.34),
+    0 0 0 1px rgba(255, 255, 255, 0.02) inset;
+}
+
+.app--games .card:nth-child(2n) {
+  transform: rotate(-0.7deg);
+}
+
+.app--games .card:nth-child(2n + 1) {
+  transform: rotate(0.6deg);
+}
+
+.app--games .card:hover {
+  transform: translateY(-3px) scale(1.01) rotate(0deg);
+}
+
+.app--profile .profile-card,
+.app--profile .summary-card,
+.app--profile .profile-field,
+.app--profile .social-metric,
+.app--profile .avatar-editor-card,
+.app--profile .avatar-editor-preview {
+  background:
+    radial-gradient(420px 220px at 0% 0%, var(--page-panel-a), transparent 58%),
+    radial-gradient(360px 220px at 100% 10%, var(--page-panel-b), transparent 60%),
+    linear-gradient(165deg, rgba(17, 8, 27, 0.96), rgba(12, 6, 20, 0.94));
+  border-color: var(--page-line);
+}
+
+.app--profile .profile-card::after {
+  background:
+    radial-gradient(380px 220px at 8% 8%, rgba(255, 170, 224, 0.2), transparent 68%),
+    radial-gradient(320px 180px at 90% 0%, rgba(176, 108, 255, 0.14), transparent 70%);
+}
+
+.app--profile .summary-item,
+.app--profile .membership-pill,
+.app--profile .friend-chip {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.app--settings .background-card,
+.app--settings .background-block,
+.app--settings .profile-card {
+  background:
+    linear-gradient(135deg, rgba(18, 9, 32, 0.96), rgba(10, 7, 21, 0.94)),
+    linear-gradient(45deg, transparent 0 46%, rgba(255, 56, 199, 0.08) 46% 52%, transparent 52% 100%);
+  border-color: var(--page-line);
+}
+
+.app--settings .background-block {
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.app--settings .profile-header,
+.app--settings .profile-actions {
+  position: relative;
+}
+
+.app--settings .profile-header::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 120px;
+  height: 120px;
+  background: radial-gradient(circle, rgba(255, 56, 199, 0.14), transparent 70%);
+  pointer-events: none;
+}
+
+.app--human-design .profile-card.profile-extras,
+.app--human-design .hd-card,
+.app--human-design .hd-modal,
+.app--human-design .hd-report-frame {
+  border-color: var(--page-line);
+  background:
+    radial-gradient(420px 220px at 10% 0%, var(--page-panel-a), transparent 60%),
+    radial-gradient(360px 240px at 92% 6%, var(--page-panel-b), transparent 62%),
+    linear-gradient(160deg, rgba(14, 8, 28, 0.96), rgba(9, 6, 18, 0.94));
+}
+
+.app--human-design .hd-report-frame {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 18px 34px rgba(0, 0, 0, 0.28);
+}
+
+.app--human-design .hd-card h2,
+.app--human-design .eyebrow {
+  color: #f0cfff;
+}
+
+body.sputnet-theme--tarot .madame-cinema {
+  background:
+    radial-gradient(circle at 16% 12%, rgba(255, 79, 184, 0.2), rgba(0, 0, 0, 0) 36%),
+    radial-gradient(circle at 82% 82%, rgba(94, 43, 255, 0.22), rgba(0, 0, 0, 0) 42%),
+    linear-gradient(175deg, #040405 0%, #000 45%, #13041e 100%);
+}
+
+body.sputnet-theme--tarot .madame-intro,
+body.sputnet-theme--tarot .madame-panel,
+body.sputnet-theme--tarot .tarot-reading-stage,
+body.sputnet-theme--tarot .tarot-oracle-chat,
+body.sputnet-theme--tarot .tarot-cinematic-intro,
+body.sputnet-theme--tarot .tarot-reading-card-front,
+body.sputnet-theme--tarot .tarot-card-viewer-front {
+  border-color: var(--page-line);
+}
+
+body.sputnet-theme--tarot .madame-intro-fallback,
+body.sputnet-theme--tarot .tarot-intro-fallback,
+body.sputnet-theme--tarot .tarot-reading-card-back,
+body.sputnet-theme--tarot .tarot-card-viewer-back {
+  background:
+    radial-gradient(circle at 32% 20%, rgba(255, 79, 184, 0.24), rgba(0, 0, 0, 0) 44%),
+    linear-gradient(160deg, rgba(15, 10, 34, 0.95), rgba(45, 10, 66, 0.92));
+}
+
+/* Sputnet world page moods */
+body {
+  --page-accent-a: #ff4fb8;
+  --page-accent-b: #8d4dff;
+  --page-glow-a: rgba(255, 79, 184, 0.18);
+  --page-glow-b: rgba(141, 77, 255, 0.22);
+  --page-glow-c: rgba(99, 35, 145, 0.14);
+  --page-panel-a: rgba(255, 79, 184, 0.14);
+  --page-panel-b: rgba(141, 77, 255, 0.18);
+  --page-line: rgba(255, 105, 180, 0.22);
+}
+
+body.sputnet-theme--games {
+  --page-accent-a: #ff4fb8;
+  --page-accent-b: #8d4dff;
+  --page-glow-a: rgba(255, 79, 184, 0.24);
+  --page-glow-b: rgba(141, 77, 255, 0.2);
+  --page-glow-c: rgba(255, 114, 199, 0.12);
+  --page-panel-a: rgba(255, 79, 184, 0.2);
+  --page-panel-b: rgba(141, 77, 255, 0.16);
+}
+
+body.sputnet-theme--profile {
+  --page-accent-a: #ff7dc7;
+  --page-accent-b: #b06cff;
+  --page-glow-a: rgba(255, 125, 199, 0.18);
+  --page-glow-b: rgba(176, 108, 255, 0.18);
+  --page-glow-c: rgba(255, 196, 236, 0.08);
+  --page-panel-a: rgba(255, 125, 199, 0.11);
+  --page-panel-b: rgba(176, 108, 255, 0.12);
+}
+
+body.sputnet-theme--settings {
+  --page-accent-a: #ff38c7;
+  --page-accent-b: #702dff;
+  --page-glow-a: rgba(255, 56, 199, 0.2);
+  --page-glow-b: rgba(112, 45, 255, 0.24);
+  --page-glow-c: rgba(226, 112, 255, 0.1);
+  --page-panel-a: rgba(255, 56, 199, 0.15);
+  --page-panel-b: rgba(112, 45, 255, 0.18);
+}
+
+body.sputnet-theme--human-design {
+  --page-accent-a: #d784ff;
+  --page-accent-b: #ff4fb8;
+  --page-glow-a: rgba(215, 132, 255, 0.22);
+  --page-glow-b: rgba(255, 79, 184, 0.16);
+  --page-glow-c: rgba(137, 94, 255, 0.14);
+  --page-panel-a: rgba(215, 132, 255, 0.16);
+  --page-panel-b: rgba(255, 79, 184, 0.12);
+}
+
+body.sputnet-theme--tarot {
+  --page-accent-a: #ff4fb8;
+  --page-accent-b: #5e2bff;
+  --page-glow-a: rgba(255, 79, 184, 0.16);
+  --page-glow-b: rgba(94, 43, 255, 0.28);
+  --page-glow-c: rgba(186, 88, 255, 0.12);
+  --page-panel-a: rgba(255, 79, 184, 0.14);
+  --page-panel-b: rgba(94, 43, 255, 0.24);
+}
+
+body {
+  background:
+    radial-gradient(1200px 680px at 10% -10%, var(--page-glow-a), transparent 55%),
+    radial-gradient(960px 640px at 100% 0%, var(--page-glow-b), transparent 52%),
+    radial-gradient(900px 700px at 50% 100%, var(--page-glow-c), transparent 60%),
+    linear-gradient(180deg, #05020a 0%, #09030f 44%, #12051d 100%);
+}
+
+body[class*="sputnet-theme--"] .btn-primary,
+body[class*="sputnet-theme--"] .homeHudNavLink.active,
+body[class*="sputnet-theme--"] .nav-link.active,
+body[class*="sputnet-theme--"] .avatar-style-choice.active {
+  background: linear-gradient(90deg, var(--page-accent-a), var(--page-accent-b));
+  color: #170513;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.26);
+}
+
+body[class*="sputnet-theme--"] .homeHud,
+body[class*="sputnet-theme--"] .modal,
+body[class*="sputnet-theme--"] .profile-card,
+body[class*="sputnet-theme--"] .summary-card,
+body[class*="sputnet-theme--"] .card,
+body[class*="sputnet-theme--"] .background-card,
+body[class*="sputnet-theme--"] .hd-card,
+body[class*="sputnet-theme--"] .blackjack {
+  border-color: var(--page-line);
+}
+
+.app--games .hero,
+.app--games .card,
+.app--games .blackjack {
+  background:
+    radial-gradient(520px 240px at 12% 0%, var(--page-panel-a), transparent 58%),
+    radial-gradient(420px 260px at 96% 12%, var(--page-panel-b), transparent 62%),
+    linear-gradient(160deg, rgba(15, 8, 24, 0.96), rgba(11, 6, 18, 0.92));
+  border-color: var(--page-line);
+}
+
+.app--games .hero {
+  box-shadow:
+    0 28px 56px rgba(0, 0, 0, 0.34),
+    0 0 0 1px rgba(255, 255, 255, 0.02) inset;
+}
+
+.app--games .card:nth-child(2n) {
+  transform: rotate(-0.7deg);
+}
+
+.app--games .card:nth-child(2n + 1) {
+  transform: rotate(0.6deg);
+}
+
+.app--games .card:hover {
+  transform: translateY(-3px) scale(1.01) rotate(0deg);
+}
+
+.app--profile .profile-card,
+.app--profile .summary-card,
+.app--profile .profile-field,
+.app--profile .social-metric,
+.app--profile .avatar-editor-card,
+.app--profile .avatar-editor-preview {
+  background:
+    radial-gradient(420px 220px at 0% 0%, var(--page-panel-a), transparent 58%),
+    radial-gradient(360px 220px at 100% 10%, var(--page-panel-b), transparent 60%),
+    linear-gradient(165deg, rgba(17, 8, 27, 0.96), rgba(12, 6, 20, 0.94));
+  border-color: var(--page-line);
+}
+
+.app--profile .profile-card::after {
+  background:
+    radial-gradient(380px 220px at 8% 8%, rgba(255, 170, 224, 0.2), transparent 68%),
+    radial-gradient(320px 180px at 90% 0%, rgba(176, 108, 255, 0.14), transparent 70%);
+}
+
+.app--profile .summary-item,
+.app--profile .membership-pill,
+.app--profile .friend-chip {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.app--settings .background-card,
+.app--settings .background-block,
+.app--settings .profile-card {
+  background:
+    linear-gradient(135deg, rgba(18, 9, 32, 0.96), rgba(10, 7, 21, 0.94)),
+    linear-gradient(45deg, transparent 0 46%, rgba(255, 56, 199, 0.08) 46% 52%, transparent 52% 100%);
+  border-color: var(--page-line);
+}
+
+.app--settings .background-block {
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.app--settings .profile-header,
+.app--settings .profile-actions {
+  position: relative;
+}
+
+.app--settings .profile-header::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 120px;
+  height: 120px;
+  background: radial-gradient(circle, rgba(255, 56, 199, 0.14), transparent 70%);
+  pointer-events: none;
+}
+
+.app--human-design .profile-card.profile-extras,
+.app--human-design .hd-card,
+.app--human-design .hd-modal,
+.app--human-design .hd-report-frame {
+  border-color: var(--page-line);
+  background:
+    radial-gradient(420px 220px at 10% 0%, var(--page-panel-a), transparent 60%),
+    radial-gradient(360px 240px at 92% 6%, var(--page-panel-b), transparent 62%),
+    linear-gradient(160deg, rgba(14, 8, 28, 0.96), rgba(9, 6, 18, 0.94));
+}
+
+.app--human-design .hd-report-frame {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 18px 34px rgba(0, 0, 0, 0.28);
+}
+
+.app--human-design .hd-card h2,
+.app--human-design .eyebrow {
+  color: #f0cfff;
+}
+
+body.sputnet-theme--tarot .madame-cinema {
+  background:
+    radial-gradient(circle at 16% 12%, rgba(255, 79, 184, 0.2), rgba(0, 0, 0, 0) 36%),
+    radial-gradient(circle at 82% 82%, rgba(94, 43, 255, 0.22), rgba(0, 0, 0, 0) 42%),
+    linear-gradient(175deg, #040405 0%, #000 45%, #13041e 100%);
+}
+
+body.sputnet-theme--tarot .madame-intro,
+body.sputnet-theme--tarot .madame-panel,
+body.sputnet-theme--tarot .tarot-reading-stage,
+body.sputnet-theme--tarot .tarot-oracle-chat,
+body.sputnet-theme--tarot .tarot-cinematic-intro,
+body.sputnet-theme--tarot .tarot-reading-card-front,
+body.sputnet-theme--tarot .tarot-card-viewer-front {
+  border-color: var(--page-line);
+}
+
+body.sputnet-theme--tarot .madame-intro-fallback,
+body.sputnet-theme--tarot .tarot-intro-fallback,
+body.sputnet-theme--tarot .tarot-reading-card-back,
+body.sputnet-theme--tarot .tarot-card-viewer-back {
+  background:
+    radial-gradient(circle at 32% 20%, rgba(255, 79, 184, 0.24), rgba(0, 0, 0, 0) 44%),
+    linear-gradient(160deg, rgba(15, 10, 34, 0.95), rgba(45, 10, 66, 0.92));
+}
+
 * {
   box-sizing: border-box;
 }
@@ -50,6 +1141,8 @@ body.tarot-cinema-body {
     linear-gradient(180deg, rgba(8, 12, 24, 0.96), rgba(8, 12, 24, 0.84));
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
+  transition: transform 220ms ease, opacity 220ms ease;
+  will-change: transform;
 }
 
 .homeHud__inner {
@@ -290,6 +1383,12 @@ body.tarot-cinema-body {
 }
 
 @media (max-width: 920px) {
+  .homeHud--mobileHidden {
+    transform: translateY(calc(-100% - 8px));
+    opacity: 0;
+    pointer-events: none;
+  }
+
   .homeHud__inner {
     padding: 9px 12px;
   }
@@ -3993,5 +5092,580 @@ button {
   .friend-actions > span {
     width: 100%;
     text-align: center;
+  }
+}
+
+/* Sputnet world theme override: final pass */
+:root {
+  --bg: #05020a;
+  --ink: #fff2fb;
+  --accent: #ff4fb8;
+  --accent-2: #8d4dff;
+  --card: rgba(19, 11, 28, 0.84);
+  --shadow: rgba(0, 0, 0, 0.48);
+  --panel: rgba(18, 10, 29, 0.88);
+  --panel-strong: rgba(10, 5, 18, 0.94);
+  --line: rgba(255, 105, 180, 0.22);
+  --line-strong: rgba(255, 151, 216, 0.42);
+  --pink-soft: #ff97d8;
+  --purple: #8d4dff;
+  --purple-soft: #d1b6ff;
+  --muted: rgba(255, 229, 244, 0.72);
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  color: var(--ink);
+  background:
+    radial-gradient(1200px 680px at 10% -10%, rgba(255, 79, 184, 0.18), transparent 55%),
+    radial-gradient(960px 640px at 100% 0%, rgba(141, 77, 255, 0.22), transparent 52%),
+    radial-gradient(900px 700px at 50% 100%, rgba(99, 35, 145, 0.14), transparent 60%),
+    linear-gradient(180deg, #05020a 0%, #09030f 44%, #12051d 100%);
+}
+
+body.tarot-cinema-body {
+  color: var(--ink);
+  background:
+    radial-gradient(900px 520px at 12% 0%, rgba(255, 79, 184, 0.16), transparent 54%),
+    radial-gradient(820px 540px at 88% 8%, rgba(141, 77, 255, 0.2), transparent 56%),
+    linear-gradient(180deg, #040209 0%, #09030f 42%, #12051d 100%);
+}
+
+.top-nav,
+.homeHud {
+  border-color: var(--line);
+  background: linear-gradient(180deg, rgba(6, 3, 12, 0.96), rgba(6, 3, 12, 0.84));
+  color: var(--ink);
+}
+
+.top-nav,
+.nav-link,
+.homeHud__brand,
+.homeHudMe,
+.homeHudStat,
+.homeHudBack,
+.homeHudNavLink,
+.homeHudLang__select,
+.profile-badge,
+.btn-link,
+.btn-ghost,
+.tarot-spread-btn.active,
+.tarot-viewer-close,
+.modal-close {
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ink);
+}
+
+.nav-link.active,
+.homeHudNavLink.active {
+  background: linear-gradient(90deg, var(--accent), #ff7dc7 55%, var(--purple));
+  border-color: transparent;
+  color: #170513;
+}
+
+.homeHud__brand:hover,
+.homeHudMe:hover,
+.homeHudStat:hover,
+.homeHudBack:hover,
+.homeHudNavLink:hover,
+.nav-link:hover,
+.btn-ghost:hover,
+.btn-link:hover,
+.modal-close:hover,
+.tarot-viewer-close:hover {
+  border-color: var(--line-strong);
+  box-shadow: 0 0 0 2px rgba(255, 79, 184, 0.12);
+}
+
+.homeHudWallet {
+  border-color: var(--line);
+  background:
+    radial-gradient(120% 140% at 16% 0%, rgba(255, 79, 184, 0.22), rgba(255, 79, 184, 0) 56%),
+    rgba(255, 255, 255, 0.04);
+  color: var(--ink);
+}
+
+.homeHudWalletCoin {
+  border-color: rgba(255, 187, 230, 0.68);
+  background:
+    radial-gradient(circle at 34% 30%, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0.28) 30%, rgba(255, 255, 255, 0.04) 55%, rgba(255, 255, 255, 0) 65%),
+    linear-gradient(160deg, rgba(255, 151, 216, 0.96), rgba(141, 77, 255, 0.96));
+  box-shadow:
+    inset 0 0 0 1px rgba(70, 18, 74, 0.45),
+    0 2px 8px rgba(255, 79, 184, 0.28);
+  color: #fff2fb;
+}
+
+.homeHudWalletUnit,
+.homeHudLang span,
+.profile-field label,
+.help-text,
+.autocomplete-status,
+.map-header p,
+.summary-detail,
+.bj-label,
+.bj-meta,
+.modal-subtitle,
+.tarot-pref span,
+.homeHudNavLink,
+.homeHudStat,
+.top-nav,
+.player-seat,
+.you-tag {
+  color: var(--muted);
+}
+
+.homeHudWallet--up .homeHudWalletDelta,
+.homeHudStat--active,
+.status.ok,
+.ready-chip,
+.ready-chip.off,
+.player-stack {
+  color: var(--purple-soft);
+  border-color: rgba(141, 77, 255, 0.36);
+  background: rgba(141, 77, 255, 0.16);
+}
+
+.homeHudWallet--down .homeHudWalletDelta,
+.homeHudStat--hot,
+.status.bad {
+  color: var(--pink-soft);
+  border-color: rgba(255, 79, 184, 0.34);
+  background: rgba(255, 79, 184, 0.14);
+}
+
+.profile-card,
+.profile-insights,
+.profile-social,
+.background-card,
+.hd-card,
+.blackjack,
+.modal,
+.tarot-card-viewer,
+.compatibility-hero,
+.compatibility-section-card,
+.compatibility-guidance,
+.compatibility-email-card {
+  color: var(--ink);
+  border-color: var(--line);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.42);
+  background:
+    radial-gradient(520px 240px at 10% 0%, rgba(255, 79, 184, 0.14), transparent 62%),
+    radial-gradient(460px 220px at 92% 0%, rgba(141, 77, 255, 0.18), transparent 66%),
+    linear-gradient(180deg, rgba(16, 8, 24, 0.96), rgba(11, 6, 18, 0.94));
+}
+
+.profile-card::after {
+  background:
+    radial-gradient(420px 220px at 10% 8%, rgba(255, 79, 184, 0.22), transparent 70%),
+    radial-gradient(360px 220px at 92% 0%, rgba(141, 77, 255, 0.18), transparent 72%);
+}
+
+.summary-card,
+.detail-card,
+.card,
+.log,
+.players,
+.debug,
+.profile-field,
+.autocomplete-list,
+.avatar-editor-card,
+.avatar-editor-preview,
+.tarot-oracle-chat,
+.tarot-cinematic-intro,
+.compatibility-mini-card,
+.compatibility-outro,
+.bj-hand {
+  color: var(--ink);
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.summary-card h3,
+.card h2,
+.players h3,
+.debug h3,
+.log h3,
+.profile-header h2,
+.modal-header h3,
+.hd-card h2,
+.map-header h3 {
+  color: #fff7fd;
+}
+
+.profile-field input,
+.flatpickr-input,
+.join-input,
+.homeHudLang__select,
+input,
+select,
+textarea {
+  background: rgba(7, 3, 14, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--ink);
+}
+
+.homeHudLang__select option {
+  background: #14081f;
+  color: var(--ink);
+}
+
+.profile-field input:focus,
+.flatpickr-input:focus,
+.join-input:focus,
+.homeHudLang__select:focus,
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 2px solid rgba(255, 79, 184, 0.34);
+  border-color: rgba(255, 151, 216, 0.55);
+}
+
+input,
+select,
+textarea {
+  accent-color: var(--accent);
+}
+
+.flatpickr-calendar {
+  background: var(--panel-strong);
+  border-color: var(--line);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.42);
+}
+
+.flatpickr-calendar,
+.flatpickr-days,
+.flatpickr-months,
+.flatpickr-weekdays,
+.flatpickr-time input,
+.flatpickr-current-month input.cur-year,
+.flatpickr-weekday,
+.flatpickr-day,
+.flatpickr-months .flatpickr-prev-month,
+.flatpickr-months .flatpickr-next-month {
+  color: var(--ink) !important;
+}
+
+.flatpickr-weekday,
+.flatpickr-current-month .flatpickr-monthDropdown-months {
+  color: var(--muted) !important;
+}
+
+.flatpickr-current-month .flatpickr-monthDropdown-months,
+.flatpickr-current-month input.cur-year:hover,
+.flatpickr-current-month .flatpickr-monthDropdown-months:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.flatpickr-day:hover {
+  background: rgba(141, 77, 255, 0.18);
+}
+
+.flatpickr-day.today {
+  border-color: rgba(255, 79, 184, 0.6);
+}
+
+.flatpickr-day.selected,
+.flatpickr-day.startRange,
+.flatpickr-day.endRange {
+  background: linear-gradient(135deg, var(--accent), var(--purple));
+  border-color: transparent;
+  color: #170513 !important;
+}
+
+.autocomplete-list li button {
+  color: var(--ink);
+}
+
+.autocomplete-list li button:hover {
+  background: rgba(255, 79, 184, 0.12);
+}
+
+.map-canvas,
+.leaflet-container {
+  background: linear-gradient(135deg, rgba(20, 9, 30, 0.95), rgba(9, 4, 16, 0.94));
+  border-color: var(--line);
+}
+
+.btn-primary {
+  background: linear-gradient(90deg, var(--accent), #ff7dc7 55%, var(--purple));
+  color: #170513;
+  box-shadow: 0 14px 30px rgba(255, 79, 184, 0.24);
+}
+
+.btn-link {
+  border-style: solid;
+  border-color: var(--line);
+  background: rgba(255, 79, 184, 0.08);
+  color: var(--ink);
+}
+
+.btn-primary:hover,
+.btn-ghost:hover,
+.btn-link:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.32);
+}
+
+.btn-primary:disabled,
+.btn-ghost:disabled,
+.btn-link:disabled {
+  box-shadow: none;
+}
+
+.status {
+  color: var(--ink);
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.blackjack {
+  background:
+    radial-gradient(circle at 12% 12%, rgba(255, 79, 184, 0.16), transparent 40%),
+    radial-gradient(circle at 88% 18%, rgba(141, 77, 255, 0.18), transparent 44%),
+    radial-gradient(circle at 30% 92%, rgba(255, 151, 216, 0.12), transparent 46%),
+    linear-gradient(135deg, rgba(11, 6, 18, 0.96), rgba(20, 9, 30, 0.94));
+}
+
+.bj-table::before {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 79, 184, 0),
+    rgba(255, 79, 184, 0.82),
+    rgba(141, 77, 255, 0.74),
+    rgba(255, 79, 184, 0)
+  );
+}
+
+.bj-card {
+  border-color: rgba(255, 151, 216, 0.22);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink);
+}
+
+.tarot-oracle-line.oracle {
+  background: rgba(141, 77, 255, 0.18);
+  border: 1px solid rgba(141, 77, 255, 0.34);
+}
+
+.tarot-oracle-line.user {
+  background: rgba(255, 79, 184, 0.16);
+  border: 1px solid rgba(255, 79, 184, 0.32);
+}
+
+.tarot-reading-stage {
+  border-color: var(--line);
+  background:
+    radial-gradient(circle at 20% 12%, rgba(255, 79, 184, 0.22), rgba(0, 0, 0, 0) 42%),
+    radial-gradient(circle at 82% 88%, rgba(141, 77, 255, 0.24), rgba(0, 0, 0, 0) 44%),
+    linear-gradient(rgba(6, 8, 18, 0.54), rgba(6, 8, 18, 0.72)),
+    url("/tarot/tarot_readings.png");
+}
+
+.tarot-intro-fallback,
+.tarot-shuffle-stack span,
+.tarot-reading-card-back,
+.tarot-card-viewer-back {
+  border-color: rgba(255, 255, 255, 0.18);
+  background:
+    radial-gradient(circle at 50% 32%, rgba(255, 151, 216, 0.3), rgba(8, 8, 20, 0) 46%),
+    linear-gradient(150deg, rgba(21, 10, 36, 0.92), rgba(50, 18, 72, 0.92));
+  box-shadow: inset 0 0 22px rgba(255, 79, 184, 0.18);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.tarot-reading-card-front,
+.tarot-card-viewer-front {
+  border-color: var(--line);
+  background: rgba(10, 6, 20, 0.92);
+}
+
+.tarot-reading-card.is-active-turn .tarot-reading-card-back {
+  border-color: var(--pink-soft);
+  box-shadow: 0 0 0 1px rgba(255, 79, 184, 0.45), inset 0 0 22px rgba(255, 79, 184, 0.3);
+}
+
+.tarot-card-hint,
+.compatibility-section-card__summary,
+.compatibility-email-card__text strong {
+  color: var(--pink-soft);
+}
+
+.modal-backdrop,
+.tarot-card-viewer-backdrop {
+  background: rgba(5, 2, 10, 0.8);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.silentDiscoPanel {
+  display: grid;
+  gap: 14px;
+}
+
+.silentDiscoLoginRow,
+.silentDiscoRoomRow,
+.silentDiscoControls,
+.silentDiscoKindRow,
+.silentDiscoUploadRow {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.silentDiscoJoinRow {
+  flex: 1 1 360px;
+}
+
+.silentDiscoRoomCard {
+  display: grid;
+  gap: 12px;
+}
+
+.silentDiscoRoomHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.silentDiscoCode {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 96px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  font-variant-numeric: tabular-nums;
+}
+
+.silentDiscoMetaGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.silentDiscoMetaGrid p {
+  margin: 0;
+}
+
+.silentDiscoAudio {
+  width: 100%;
+  min-height: 44px;
+}
+
+.silentDiscoSourcePanel {
+  display: grid;
+  gap: 10px;
+}
+
+@media (max-width: 680px) {
+  .silentDiscoControls,
+  .silentDiscoKindRow,
+  .silentDiscoRoomRow {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .silentDiscoJoinRow {
+    width: 100%;
+  }
+
+  .silentDiscoJoinRow .join-input,
+  .silentDiscoJoinRow .btn-ghost,
+  .silentDiscoControls .btn-primary,
+  .silentDiscoControls .btn-ghost,
+  .silentDiscoKindRow .btn-primary,
+  .silentDiscoKindRow .btn-ghost {
+    width: 100%;
+  }
+
+  .silentDiscoCode {
+    min-width: 0;
+    width: 100%;
+  }
+}
+
+.silentDiscoJoinTokenInput {
+  width: 100%;
+}
+
+.silentDiscoShareBlock {
+  display: grid;
+  gap: 10px;
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.silentDiscoShareButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.silentDiscoShareRow {
+  display: grid;
+  gap: 6px;
+}
+
+.silentDiscoShareInputRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.silentDiscoShareInput {
+  flex: 1 1 320px;
+  min-height: 38px;
+}
+
+.silentDiscoQrWrap {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.silentDiscoQrCard {
+  margin: 0;
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+}
+
+.silentDiscoQrCard figcaption {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.silentDiscoQrImage {
+  width: 160px;
+  height: 160px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: #fff;
+}
+
+@media (max-width: 680px) {
+  .silentDiscoShareButtons .btn-primary,
+  .silentDiscoShareButtons .btn-ghost,
+  .silentDiscoShareInputRow .btn-ghost,
+  .silentDiscoShareInput {
+    width: 100%;
+    flex: 1 1 100%;
+  }
+
+  .silentDiscoQrWrap {
+    justify-content: center;
   }
 }

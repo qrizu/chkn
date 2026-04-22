@@ -32,6 +32,7 @@ import { getRedis } from "./db/redis";
 import { computeBirthChart, type ProfileRow } from "./astro";
 import { computeProfileInsights } from "./insights";
 import { drawDailyTarotCard, getTarotCardByNumber, getTarotMajorArcana } from "./tarot";
+import { createSilentDiscoManager } from "./silentDisco";
 
 type MatchRuntime = {
   orchestrator: MatchOrchestrator;
@@ -3263,6 +3264,9 @@ const server = http.createServer((req, res) => {
     );
     return;
   }
+  if (silentDisco.handleHttpRequest(req, res)) {
+    return;
+  }
   if (req.url === "/api/profile" && req.method === "GET") {
     const authHeaders = getAuthentikHeaders(req.headers as Record<string, unknown>);
     const userId = authHeaders["x-authentik-uid"] ?? null;
@@ -5277,6 +5281,11 @@ const getAuthentikHeaders = (headers: Record<string, unknown>): Record<string, s
   return out;
 };
 
+const silentDisco = createSilentDiscoManager({
+  parseJsonBody,
+  getAuthentikHeaders,
+});
+
 const getYatzyToken = async (runtime: MatchRuntime, apiUrl: string): Promise<string> => {
   if (runtime.yatzyAuthToken) return runtime.yatzyAuthToken;
   if (!runtime.hostAuthHeaders || !runtime.hostAuthHeaders["x-authentik-uid"]) {
@@ -5307,6 +5316,7 @@ io.on("connection", (socket) => {
   // eslint-disable-next-line no-console
   console.log("socket connected", socket.id, socket.handshake.address, socket.handshake.headers.origin);
   const authHeaders = getAuthentikHeaders(socket.handshake.headers as Record<string, unknown>);
+  silentDisco.bindSocketConnection(io, socket, authHeaders);
   socket.emit("event", {
     type: "AUTH_DEBUG",
     payload: {

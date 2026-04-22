@@ -490,6 +490,107 @@
         print-color-adjust: exact;
       }
     }
+
+    /* Sputnet world theme override */
+    :root {
+      --bg: #05020a;
+      --ink: #fff2fb;
+      --muted: rgba(255, 229, 244, 0.72);
+      --accent: #ff4fb8;
+      --accent-2: #8d4dff;
+      --accent-neon: #d1b6ff;
+      --card: rgba(19, 11, 28, 0.84);
+      --card-border: rgba(255, 105, 180, 0.18);
+      --shadow: 0 24px 64px rgba(0, 0, 0, 0.44);
+    }
+
+    body {
+      color: var(--ink);
+      background:
+        radial-gradient(1200px 680px at 10% -10%, rgba(255, 79, 184, 0.18), transparent 56%),
+        radial-gradient(960px 640px at 100% 0%, rgba(141, 77, 255, 0.2), transparent 52%),
+        linear-gradient(180deg, #05020a 0%, #09030f 46%, #12051d 100%);
+    }
+
+    .page {
+      background: linear-gradient(135deg, rgba(12, 6, 20, 0.96), rgba(23, 11, 35, 0.94));
+      border: 1px solid var(--card-border);
+    }
+
+    .sidebar,
+    .main,
+    .sidebar-item,
+    .sidebar-meta,
+    .meta-row,
+    .pill,
+    .column-card,
+    .entry,
+    .bodygraph-frame {
+      color: var(--ink);
+      border-color: var(--card-border);
+      background: rgba(255, 255, 255, 0.04);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    }
+
+    .sidebar {
+      background: rgba(0, 0, 0, 0.26);
+    }
+
+    .main {
+      background:
+        radial-gradient(420px 220px at 10% 0%, rgba(255, 79, 184, 0.14), transparent 62%),
+        radial-gradient(360px 220px at 96% 0%, rgba(141, 77, 255, 0.16), transparent 66%),
+        linear-gradient(180deg, rgba(16, 8, 24, 0.96), rgba(11, 6, 18, 0.94));
+    }
+
+    .sidebar-meta-header,
+    .main-header,
+    .column-card header,
+    .entry {
+      border-color: rgba(255, 105, 180, 0.14);
+    }
+
+    .sidebar-meta,
+    .sidebar-meta-header .meta-value,
+    .meta-row .meta-value,
+    .main-header h2,
+    .column-card header,
+    .sidebar-item div,
+    .icon {
+      color: var(--ink);
+    }
+
+    .brand-line,
+    .report-footer,
+    .meta-label,
+    .sidebar-item label {
+      color: var(--muted);
+    }
+
+    .column-card.design header,
+    .column-card.design .icon,
+    .column-card.design .astro-icon,
+    .entry span:first-child,
+    .column-card.design .entry span:first-child {
+      color: var(--accent);
+    }
+
+    .column-card.personality header,
+    .column-card.personality .icon,
+    .column-card.personality .astro-icon,
+    .column-card.personality .entry span:first-child {
+      color: var(--accent-neon);
+      text-shadow: 0 2px 8px rgba(141, 77, 255, 0.28);
+    }
+
+    .icon {
+      background: rgba(255, 255, 255, 0.08);
+      box-shadow: none;
+    }
+
+    .bodygraph-frame {
+      background: linear-gradient(180deg, rgba(10, 5, 18, 0.92), rgba(18, 9, 28, 0.92));
+    }
   </style>
 </head>
 <body>
@@ -1570,7 +1671,7 @@
             "text-anchor": "middle",
             "font-size": "10",
             "font-weight": "700",
-            fill: "#1f1b16"
+            fill: "#fff2fb"
           });
           label.textContent = name.toUpperCase();
           svg.appendChild(label);
@@ -1681,7 +1782,7 @@
             cx: pos.x,
             cy: pos.y,
             r: 2.5,
-            fill: "#db4a2b"
+            fill: "#ff4fb8"
           });
           svg.appendChild(dot);
           const label = createEl("text", {
@@ -1689,7 +1790,7 @@
             y: pos.y + 4,
             "font-size": "8",
             "font-weight": "600",
-            fill: "#db4a2b"
+            fill: "#ff4fb8"
           });
           label.textContent = gate;
           svg.appendChild(label);
